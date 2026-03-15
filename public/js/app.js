@@ -39,30 +39,57 @@ function getShop() {
 // API Functions
 // ============================================
 
+const API_BASE = 'https://adangle-ai-production.up.railway.app';
+
 const api = {
   async get(endpoint) {
     const shop = getShop();
     const sep = endpoint.includes('?') ? '&' : '?';
-    const res = await fetch(`/api${endpoint}${sep}shop=${shop}`);
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text);
+    const url = `${API_BASE}/api${endpoint}${sep}shop=${shop}`;
+    console.log('Fetching:', url);
+    
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      console.log('Response status:', res.status);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      console.log('Response data:', data);
+      return data;
+    } catch (e) {
+      console.error('Fetch error:', e);
+      throw e;
     }
-    return res.json();
   },
 
   async post(endpoint, data) {
     const shop = getShop();
-    const res = await fetch(`/api${endpoint}?shop=${shop}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || 'Request failed');
+    const url = `${API_BASE}/api${endpoint}?shop=${shop}`;
+    console.log('Posting to:', url, data);
+    
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      console.log('Response status:', res.status);
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    } catch (e) {
+      console.error('Post error:', e);
+      throw e;
     }
-    return res.json();
   },
 };
 
