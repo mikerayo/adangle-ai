@@ -7,6 +7,14 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Allow Shopify iframe embedding
+app.use((req, res, next) => {
+  const shop = req.query.shop || req.session?.shop || '';
+  res.setHeader('Content-Security-Policy', `frame-ancestors https://${shop} https://admin.shopify.com;`);
+  res.removeHeader('X-Frame-Options');
+  next();
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
