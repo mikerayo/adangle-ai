@@ -90,4 +90,4 @@ function checkLimits(type) {
   };
 }
 
-module.exports = { authMiddleware, checkLimits };
+module.exports = { authMiddleware, checkLimits, checkUsage: checkLimits };
