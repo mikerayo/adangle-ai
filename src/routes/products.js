@@ -83,6 +83,69 @@ async function fetchShopifyProducts(shop, accessToken) {
 }
 
 /**
+ * Import ALL products from a store
+ */
+router.post('/import-store', authMiddleware, async (req, res) => {
+  try {
+    const { shopId } = req.shopify;
+    let { store } = req.body;
+    
+    if (!store) {
+      return res.status(400).json({ error: 'Store domain is required' });
+    }
+    
+    // Clean domain
+    store = store.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    
+    // Fetch all products (Shopify public endpoint, max 250)
+    const jsonUrl = `https://${store}/products.json?limit=250`;
+    console.log('Fetching all products from:', jsonUrl);
+    
+    const response = await fetch(jsonUrl, {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Could not fetch products. Make sure it\'s a valid Shopify store.' });
+    }
+    
+    const data = await response.json();
+    const products = data.products || [];
+    
+    if (products.length === 0) {
+      return res.status(400).json({ error: 'No products found in this store' });
+    }
+    
+    // Save all to database
+    let count = 0;
+    for (const p of products) {
+      await pool.query(`
+        INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (shop_id, shopify_product_id) 
+        DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+      `, [
+        shopId,
+        `${store}_${p.id}`,
+        p.title,
+        p.body_html ? p.body_html.replace(/<[^>]*>/g, '').substring(0, 2000) : '',
+        p.variants[0]?.price || 0,
+        p.variants[0]?.compare_at_price || null,
+        p.image?.src || p.images?.[0]?.src || null,
+        p.product_type || null
+      ]);
+      count++;
+    }
+    
+    res.json({ success: true, count });
+    
+  } catch (error) {
+    console.error('Import store error:', error);
+    res.status(500).json({ error: 'Failed to import products' });
+  }
+});
+
+/**
  * Import product from URL
  */
 router.post('/import', authMiddleware, async (req, res) => {

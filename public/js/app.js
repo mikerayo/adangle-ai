@@ -341,18 +341,29 @@ function renderAddProductModal() {
     <div class="modal-overlay" onclick="closeModal()">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-header">
-          <h2>Add Product</h2>
+          <h2>Add Products</h2>
           <button class="btn-close" onclick="closeModal()">×</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Product URL</label>
-            <input type="text" id="product-url" class="input" placeholder="https://yourstore.com/products/product-name">
-            <small style="color:#666;display:block;margin-top:4px;">Paste any Shopify product URL</small>
+            <label>🏪 Import All Products from Store</label>
+            <input type="text" id="store-url" class="input" placeholder="yourstore.myshopify.com or yourstore.com">
+            <small style="color:#666;display:block;margin-top:4px;">Enter any Shopify store domain</small>
           </div>
           
-          <button class="btn btn-primary" onclick="importFromUrl()" style="width:100%;">
-            🔍 Import Product
+          <button class="btn btn-primary" onclick="importAllFromStore()" style="width:100%;">
+            📦 Import All Products
+          </button>
+          
+          <div style="text-align:center; margin: 20px 0; color:#666;">— or import single product —</div>
+          
+          <div class="form-group">
+            <label>Product URL</label>
+            <input type="text" id="product-url" class="input" placeholder="https://yourstore.com/products/product-name">
+          </div>
+          
+          <button class="btn btn-secondary" onclick="importFromUrl()" style="width:100%;">
+            🔍 Import Single Product
           </button>
           
           <div style="text-align:center; margin: 20px 0; color:#666;">— or add manually —</div>
@@ -363,7 +374,7 @@ function renderAddProductModal() {
           </div>
           <div class="form-group">
             <label>Description</label>
-            <textarea id="product-description" class="input" rows="3" placeholder="Describe your product..."></textarea>
+            <textarea id="product-description" class="input" rows="2" placeholder="Describe your product..."></textarea>
           </div>
           <div style="display:flex;gap:12px;">
             <div class="form-group" style="flex:1;">
@@ -375,18 +386,56 @@ function renderAddProductModal() {
               <input type="number" id="product-compare" class="input" placeholder="79.99">
             </div>
           </div>
-          <div class="form-group">
-            <label>Image URL</label>
-            <input type="text" id="product-image" class="input" placeholder="https://...">
-          </div>
           
-          <button class="btn btn-secondary" onclick="addProductManually()" style="width:100%;">
+          <button class="btn btn-ghost" onclick="addProductManually()" style="width:100%;">
             Add Manually
           </button>
         </div>
       </div>
     </div>
   `;
+}
+
+async function importAllFromStore() {
+  const storeInput = document.getElementById('store-url');
+  let store = storeInput?.value?.trim();
+  
+  if (!store) {
+    showToast('Please enter a store domain', 'error');
+    return;
+  }
+  
+  // Clean up the domain
+  store = store.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  
+  showToast('Importing all products...', 'info');
+  
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', \`\${API_BASE}/api/products/import-store?shop=\${getShop()}\`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = 30000;
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.error || 'Import failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error'));
+      xhr.ontimeout = () => reject(new Error('Request timeout'));
+      xhr.send(JSON.stringify({ store }));
+    });
+    
+    showToast(\`Imported \${response.count} products!\`, 'success');
+    closeModal();
+    loadProducts();
+    
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
 }
 
 function closeModal() {
