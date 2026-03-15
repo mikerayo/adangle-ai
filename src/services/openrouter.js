@@ -1,39 +1,46 @@
-const OpenAI = require('openai');
+/**
+ * OpenRouter Service - Direct fetch (no SDK)
+ * Avoids OpenAI SDK's OPENAI_API_KEY requirement
+ */
 
-const openrouter = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': process.env.SHOPIFY_HOST,
-    'X-Title': 'AdAngle AI',
-  },
-});
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 // Models for different tasks
 const MODELS = {
-  discovery: 'anthropic/claude-3.5-sonnet',      // Best reasoning for angle discovery
-  creative: 'anthropic/claude-3.5-sonnet',       // Creative copy
-  structured: 'openai/gpt-4o',                   // Structured output
-  fast: 'meta-llama/llama-3.1-70b-instruct',    // Fast variations
-  cheap: 'mistralai/mixtral-8x7b-instruct',     // Cheap variations
+  discovery: 'anthropic/claude-3.5-sonnet',
+  creative: 'anthropic/claude-3.5-sonnet',
+  structured: 'openai/gpt-4o',
+  fast: 'meta-llama/llama-3.1-70b-instruct',
+  cheap: 'mistralai/mixtral-8x7b-instruct',
 };
 
 /**
  * Generate with specific model
  */
 async function generate(model, prompt, options = {}) {
-  try {
-    const response = await openrouter.chat.completions.create({
+  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.SHOPIFY_HOST || 'https://adangle.ai',
+      'X-Title': 'AdAngle AI',
+    },
+    body: JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: prompt }],
       temperature: options.temperature || 0.8,
       max_tokens: options.maxTokens || 2000,
-    });
-    return response.choices[0].message.content;
-  } catch (error) {
-    console.error(`Error with model ${model}:`, error.message);
-    throw error;
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenRouter error: ${error}`);
   }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
 }
 
 /**
@@ -57,7 +64,6 @@ For each angle, provide:
 4. HOOK: The first sentence of the ad (must stop the scroll)
 5. OBJECTION: What doubt this angle overcomes
 6. EMOTION: Primary emotion it triggers (fear, hope, frustration, relief, etc.)
-7. TARGET_DEMO: Facebook targeting suggestion
 
 RULES:
 - Each angle must be COMPLETELY different
@@ -65,8 +71,6 @@ RULES:
 - Think about different BUYING MOMENTS (self-purchase, gift, urgent need)
 - Include at least 1 COMPARISON angle (vs expensive alternative)
 - Include at least 1 SKEPTIC angle (for non-believers)
-- Include at least 1 SOCIAL PROOF angle
-- Include at least 1 TRANSFORMATION angle
 - NO medical claims
 - Focus on benefits, not features
 
@@ -79,8 +83,7 @@ OUTPUT FORMAT (JSON):
       "pain_point": "...",
       "hook": "...",
       "objection": "...",
-      "emotion": "...",
-      "target_demo": "..."
+      "emotion": "..."
     }
   ]
 }
@@ -90,7 +93,6 @@ Generate exactly 10 angles. Output ONLY valid JSON.`;
   const response = await generate(MODELS.discovery, prompt, { temperature: 0.9 });
   
   try {
-    // Extract JSON from response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
@@ -129,27 +131,25 @@ WRITE ONE AD COPY following these rules:
 - End with a soft CTA
 - NO medical claims
 - NO excessive emojis (max 2-3)
-- NO ALL CAPS except for emphasis
 
 OUTPUT ONLY THE AD COPY TEXT, nothing else.`;
 
   const styles = [
     { name: 'storytelling', instruction: '\n\nSTYLE: Personal story format. Start with "I" and share a transformation journey.' },
     { name: 'problem-solution', instruction: '\n\nSTYLE: Problem-solution format. Start by agitating the problem, then present the solution.' },
-    { name: 'comparison', instruction: '\n\nSTYLE: Comparison format. Compare to expensive alternatives (chiropractor, gym, etc.).' },
+    { name: 'comparison', instruction: '\n\nSTYLE: Comparison format. Compare to expensive alternatives.' },
     { name: 'social-proof', instruction: '\n\nSTYLE: Social proof format. Reference what others are doing/saying.' },
     { name: 'urgency', instruction: '\n\nSTYLE: Urgency format. Create FOMO without being pushy.' },
   ];
 
   const modelAssignments = [
-    MODELS.creative,   // storytelling
-    MODELS.structured, // problem-solution
-    MODELS.creative,   // comparison
-    MODELS.fast,       // social-proof
-    MODELS.cheap,      // urgency
+    MODELS.creative,
+    MODELS.structured,
+    MODELS.creative,
+    MODELS.fast,
+    MODELS.cheap,
   ];
 
-  // Generate all 5 copies in parallel
   const promises = styles.map((style, index) => 
     generate(modelAssignments[index], basePrompt + style.instruction, { temperature: 0.85 })
       .then(content => ({
@@ -160,13 +160,12 @@ OUTPUT ONLY THE AD COPY TEXT, nothing else.`;
       .catch(err => ({
         style: style.name,
         model: modelAssignments[index],
-        content: `Error generating: ${err.message}`,
+        content: `Error: ${err.message}`,
         error: true
       }))
   );
 
-  const copies = await Promise.all(promises);
-  return copies;
+  return Promise.all(promises);
 }
 
 /**
@@ -187,25 +186,23 @@ Create a script with this EXACT structure:
 (What to say + action/expression)
 
 [PROBLEM - 3-8 seconds]  
-(Relatable problem statement + visual suggestion)
+(Relatable problem statement)
 
 [SOLUTION - 8-18 seconds]
-(Introduce product + show it + key benefit)
+(Introduce product + key benefit)
 
 [PROOF - 18-25 seconds]
-(Result/transformation + how it feels)
+(Result/transformation)
 
 [CTA - 25-30 seconds]
 (Soft call to action)
 
-Make it feel NATURAL, not scripted. Like talking to a friend.
-Include parenthetical directions for actions/expressions.
+Make it feel NATURAL. Include directions for actions.
 NO medical claims.
 
 OUTPUT THE SCRIPT ONLY.`;
 
-  const script = await generate(MODELS.structured, prompt, { temperature: 0.8 });
-  return script;
+  return generate(MODELS.structured, prompt, { temperature: 0.8 });
 }
 
 module.exports = {
