@@ -16,9 +16,28 @@
   
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  
+  <!-- Shopify App Bridge -->
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="/js/app.js"></script>
+  <script>
+    // Get shop from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const shop = urlParams.get('shop');
+    const host = urlParams.get('host');
+    
+    // Store for later use
+    window.shopifyShop = shop;
+    window.shopifyHost = host;
+    
+    // Initialize App Bridge if embedded in Shopify
+    if (window.shopify && host) {
+      // App Bridge 4.x is auto-initialized
+      console.log('Running inside Shopify Admin');
+    }
+  </script>
+  <script src="/js/app.js"></script>
 </body>
 </html>
