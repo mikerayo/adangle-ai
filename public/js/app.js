@@ -492,12 +492,50 @@ async function navigate(page) {
 }
 
 async function loadProducts() {
+  if (state.loading.products) {
+    console.log('Already loading, skip');
+    return;
+  }
+  
   console.log('loadProducts started');
   state.loading.products = true;
   render();
   
+  const shop = getShop();
+  const url = `${API_BASE}/api/products?shop=${shop}`;
+  
   try {
-    const data = await api.get('/products');
+    console.log('Fetching products from:', url);
+    
+    // Simple XMLHttpRequest as fallback
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.timeout = 10000;
+      
+      xhr.onload = () => {
+        console.log('XHR status:', xhr.status);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error(`HTTP ${xhr.status}`));
+        }
+      };
+      
+      xhr.onerror = () => {
+        console.error('XHR error');
+        reject(new Error('Network error'));
+      };
+      
+      xhr.ontimeout = () => {
+        console.error('XHR timeout');
+        reject(new Error('Timeout'));
+      };
+      
+      xhr.send();
+    });
+    
     console.log('Products loaded:', data);
     state.products = data.products || [];
   } catch (e) {
