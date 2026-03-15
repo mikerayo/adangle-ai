@@ -33,15 +33,24 @@ const state = {
 // API Functions
 // ============================================
 
+// Get shop from URL for API calls
+function getShop() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('shop') || '';
+}
+
 const api = {
   async get(endpoint) {
-    const res = await fetch(`/api${endpoint}`);
+    const shop = getShop();
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const res = await fetch(`/api${endpoint}${separator}shop=${shop}`);
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async post(endpoint, data) {
-    const res = await fetch(`/api${endpoint}`, {
+    const shop = getShop();
+    const res = await fetch(`/api${endpoint}?shop=${shop}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

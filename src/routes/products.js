@@ -1,47 +1,68 @@
 const express = require('express');
 const { pool } = require('../config/database');
-const shopifyService = require('../services/shopify');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
 /**
- * Get all products from connected shop
+ * Get all products
+ * For embedded apps without API access, returns demo/saved products
  * GET /api/products
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { shop, accessToken, shopId } = req.shopify;
+    const { shopId, shop } = req.shopify;
 
-    // Fetch from Shopify
-    const products = await shopifyService.getProducts(shop, accessToken);
-
-    // Return with any existing analysis data
-    const productIds = products.map(p => p.shopify_product_id);
-    
-    const existingData = await pool.query(`
-      SELECT p.shopify_product_id, COUNT(a.id) as angle_count
+    // Get products from our database
+    const result = await pool.query(`
+      SELECT p.*, COUNT(a.id) as angles_discovered
       FROM products p
       LEFT JOIN angles a ON a.product_id = p.id
-      WHERE p.shop_id = $1 AND p.shopify_product_id = ANY($2)
-      GROUP BY p.shopify_product_id
-    `, [shopId, productIds]);
+      WHERE p.shop_id = $1
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+    `, [shopId]);
 
-    const analysisMap = {};
-    existingData.rows.forEach(row => {
-      analysisMap[row.shopify_product_id] = parseInt(row.angle_count);
-    });
+    if (result.rows.length === 0) {
+      // No products yet - return empty with instructions
+      return res.json({ 
+        products: [],
+        message: 'Add your first product to get started'
+      });
+    }
 
-    const enrichedProducts = products.map(product => ({
-      ...product,
-      angles_discovered: analysisMap[product.shopify_product_id] || 0,
-    }));
-
-    res.json({ products: enrichedProducts });
+    res.json({ products: result.rows });
 
   } catch (error) {
     console.error('Get products error:', error);
     res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+/**
+ * Add a product manually
+ * POST /api/products
+ */
+router.post('/', authMiddleware, async (req, res) => {
+  try {
+    const { shopId } = req.shopify;
+    const { title, description, price, compare_at_price, image_url, category } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ error: 'Product title is required' });
+    }
+
+    const result = await pool.query(`
+      INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+    `, [shopId, `manual_${Date.now()}`, title, description, price || 0, compare_at_price, image_url, category]);
+
+    res.json({ product: result.rows[0] });
+
+  } catch (error) {
+    console.error('Add product error:', error);
+    res.status(500).json({ error: 'Failed to add product' });
   }
 });
 
@@ -51,23 +72,28 @@ router.get('/', authMiddleware, async (req, res) => {
  */
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const { shop, accessToken, shopId } = req.shopify;
+    const { shopId } = req.shopify;
     const { id } = req.params;
 
-    // Fetch from Shopify
-    const product = await shopifyService.getProduct(shop, accessToken, id);
+    const productResult = await pool.query(
+      'SELECT * FROM products WHERE (id = $1 OR shopify_product_id = $1) AND shop_id = $2',
+      [id, shopId]
+    );
 
-    // Get any existing angles
-    const anglesResult = await pool.query(`
-      SELECT a.* FROM angles a
-      JOIN products p ON a.product_id = p.id
-      WHERE p.shop_id = $1 AND p.shopify_product_id = $2
-      ORDER BY a.created_at DESC
-    `, [shopId, id]);
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
-    res.json({
+    const product = productResult.rows[0];
+
+    const anglesResult = await pool.query(
+      'SELECT * FROM angles WHERE product_id = $1 ORDER BY created_at DESC',
+      [product.id]
+    );
+
+    res.json({ 
       product,
-      angles: anglesResult.rows,
+      angles: anglesResult.rows
     });
 
   } catch (error) {

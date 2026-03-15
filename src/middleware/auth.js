@@ -1,100 +1,93 @@
 const { pool } = require('../config/database');
 
 /**
- * Auth middleware - verifies session and adds shopify data to request
+ * Auth middleware - works with both OAuth and embedded apps
  */
 async function authMiddleware(req, res, next) {
+  // Try to get shop from multiple sources
+  const shop = req.query.shop || req.session?.shop || req.headers['x-shopify-shop'];
+  
+  if (!shop) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
   try {
-    const { shop, accessToken } = req.session;
-
-    if (!shop || !accessToken) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Get shop from database
-    const result = await pool.query(
-      'SELECT id, plan FROM shops WHERE shopify_domain = $1',
+    // Get or create shop in database
+    let result = await pool.query(
+      'SELECT id, shopify_domain, access_token, plan FROM shops WHERE shopify_domain = $1',
       [shop]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Shop not found' });
+      // Auto-register shop for embedded apps
+      result = await pool.query(`
+        INSERT INTO shops (shopify_domain, access_token, plan)
+        VALUES ($1, 'embedded', 'free')
+        ON CONFLICT (shopify_domain) DO UPDATE SET updated_at = NOW()
+        RETURNING id, shopify_domain, access_token, plan
+      `, [shop]);
     }
 
-    // Attach to request
+    const shopData = result.rows[0];
+    
+    // Attach shop info to request
     req.shopify = {
-      shop,
-      accessToken,
-      shopId: result.rows[0].id,
-      plan: result.rows[0].plan,
+      shop: shopData.shopify_domain,
+      shopId: shopData.id,
+      accessToken: shopData.access_token,
+      plan: shopData.plan,
     };
+    
+    // Save to session for future requests
+    req.session.shop = shop;
 
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
-    res.status(500).json({ error: 'Authentication error' });
+    res.status(500).json({ error: 'Authentication failed' });
   }
 }
 
 /**
- * Check usage limits
+ * Check usage limits based on plan
  */
-function checkUsage(type) {
+function checkLimits(type) {
   return async (req, res, next) => {
-    try {
-      const { shopId, plan } = req.shopify;
-      const month = new Date().toISOString().slice(0, 7);
+    const limits = {
+      free: { angles_per_month: 3, copies_per_month: 15 },
+      starter: { angles_per_month: 30, copies_per_month: -1 },
+      pro: { angles_per_month: -1, copies_per_month: -1 },
+    };
 
-      // Get current usage
-      const usageResult = await pool.query(
-        'SELECT angles_discovered, copies_generated FROM usage WHERE shop_id = $1 AND month = $2',
-        [shopId, month]
-      );
-      
-      const usage = usageResult.rows[0] || { angles_discovered: 0, copies_generated: 0 };
-      const limits = getPlanLimits(plan);
+    const shopId = req.shopify?.shopId;
+    const plan = req.shopify?.plan || 'free';
+    const planLimits = limits[plan] || limits.free;
 
-      // Check limits
-      if (type === 'angles') {
-        if (limits.angles_per_month !== -1 && usage.angles_discovered >= limits.angles_per_month) {
-          return res.status(403).json({
-            error: 'Angle discovery limit reached',
-            limit: limits.angles_per_month,
-            used: usage.angles_discovered,
-            upgrade: plan === 'free' ? 'starter' : 'pro',
-          });
-        }
-      }
-
-      if (type === 'copies') {
-        if (limits.copies_per_month !== -1 && usage.copies_generated >= limits.copies_per_month) {
-          return res.status(403).json({
-            error: 'Copy generation limit reached',
-            limit: limits.copies_per_month,
-            used: usage.copies_generated,
-            upgrade: plan === 'free' ? 'starter' : 'pro',
-          });
-        }
-      }
-
-      req.usage = usage;
-      req.limits = limits;
-      next();
-
-    } catch (error) {
-      console.error('Check usage error:', error);
-      res.status(500).json({ error: 'Failed to check usage' });
+    // -1 means unlimited
+    if (planLimits[`${type}_per_month`] === -1) {
+      return next();
     }
+
+    // Check current usage
+    const month = new Date().toISOString().slice(0, 7);
+    const result = await pool.query(
+      `SELECT ${type === 'angles' ? 'angles_discovered' : 'copies_generated'} as count 
+       FROM usage WHERE shop_id = $1 AND month = $2`,
+      [shopId, month]
+    );
+
+    const currentUsage = result.rows[0]?.count || 0;
+    const limit = planLimits[`${type}_per_month`];
+
+    if (currentUsage >= limit) {
+      return res.status(403).json({ 
+        error: `Monthly ${type} limit reached (${currentUsage}/${limit})`,
+        upgrade: true
+      });
+    }
+
+    next();
   };
 }
 
-function getPlanLimits(plan) {
-  const limits = {
-    free: { angles_per_month: 3, copies_per_month: 15 },
-    starter: { angles_per_month: 30, copies_per_month: -1 },
-    pro: { angles_per_month: -1, copies_per_month: -1 },
-  };
-  return limits[plan] || limits.free;
-}
-
-module.exports = { authMiddleware, checkUsage };
+module.exports = { authMiddleware, checkLimits };
