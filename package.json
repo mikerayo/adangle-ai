@@ -1,0 +1,42 @@
+{
+  "name": "adangle-ai",
+  "version": "1.0.0",
+  "description": "Find the perfect angle to sell any product - Shopify App",
+  "main": "server.js",
+  "scripts": {
+    "dev": "NODE_ENV=development node server.js",
+    "start": "NODE_ENV=production node server.js",
+    "worker": "NODE_ENV=production DISABLE_WORKERS=false node src/worker.js",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "connect-redis": "^7.1.1",
+    "ioredis": "^5.4.1",
+    "bullmq": "^5.12.0",
+    "pg": "^8.13.0",
+    "openai": "^4.67.0",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "shopify",
+    "shopify-app",
+    "ai",
+    "ad-copy",
+    "marketing",
+    "ecommerce"
+  ],
+  "author": "",
+  "license": "MIT"
+}
