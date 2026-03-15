@@ -51,6 +51,8 @@ const api = {
     try {
       const res = await fetch(url, {
         method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
         headers: { 'Accept': 'application/json' },
       });
       console.log('Response status:', res.status);
@@ -74,6 +76,8 @@ const api = {
     try {
       const res = await fetch(url, {
         method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json',
