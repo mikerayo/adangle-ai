@@ -331,7 +331,149 @@ function renderProducts() {
         `).join('')}
       </div>
     `}
+    
+    ${state.showAddModal ? renderAddProductModal() : ''}
   `;
+}
+
+function renderAddProductModal() {
+  return `
+    <div class="modal-overlay" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Add Product</h2>
+          <button class="btn-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Product URL</label>
+            <input type="text" id="product-url" class="input" placeholder="https://yourstore.com/products/product-name">
+            <small style="color:#666;display:block;margin-top:4px;">Paste any Shopify product URL</small>
+          </div>
+          
+          <button class="btn btn-primary" onclick="importFromUrl()" style="width:100%;">
+            🔍 Import Product
+          </button>
+          
+          <div style="text-align:center; margin: 20px 0; color:#666;">— or add manually —</div>
+          
+          <div class="form-group">
+            <label>Product Name</label>
+            <input type="text" id="product-title" class="input" placeholder="Back Stretcher">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="product-description" class="input" rows="3" placeholder="Describe your product..."></textarea>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label>Price</label>
+              <input type="number" id="product-price" class="input" placeholder="39.99">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Compare Price</label>
+              <input type="number" id="product-compare" class="input" placeholder="79.99">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Image URL</label>
+            <input type="text" id="product-image" class="input" placeholder="https://...">
+          </div>
+          
+          <button class="btn btn-secondary" onclick="addProductManually()" style="width:100%;">
+            Add Manually
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function closeModal() {
+  state.showAddModal = false;
+  render();
+}
+
+async function importFromUrl() {
+  const urlInput = document.getElementById('product-url');
+  const url = urlInput?.value?.trim();
+  
+  if (!url) {
+    showToast('Please enter a product URL', 'error');
+    return;
+  }
+  
+  showToast('Importing...', 'info');
+  
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', \`\${API_BASE}/api/products/import?shop=\${getShop()}\`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = 15000;
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.error || 'Import failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error'));
+      xhr.ontimeout = () => reject(new Error('Request timeout'));
+      xhr.send(JSON.stringify({ url }));
+    });
+    
+    showToast('Product imported!', 'success');
+    closeModal();
+    loadProducts();
+    
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function addProductManually() {
+  const title = document.getElementById('product-title')?.value?.trim();
+  const description = document.getElementById('product-description')?.value?.trim();
+  const price = document.getElementById('product-price')?.value;
+  const compare = document.getElementById('product-compare')?.value;
+  const image = document.getElementById('product-image')?.value?.trim();
+  
+  if (!title) {
+    showToast('Product name is required', 'error');
+    return;
+  }
+  
+  try {
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', \`\${API_BASE}/api/products?shop=\${getShop()}\`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error('Failed to add product'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error'));
+      xhr.send(JSON.stringify({
+        title,
+        description,
+        price: parseFloat(price) || 0,
+        compare_at_price: parseFloat(compare) || null,
+        image_url: image || null
+      }));
+    });
+    
+    showToast('Product added!', 'success');
+    closeModal();
+    loadProducts();
+    
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
 }
 
 function renderProductDetail() {

@@ -83,6 +83,86 @@ async function fetchShopifyProducts(shop, accessToken) {
 }
 
 /**
+ * Import product from URL
+ */
+router.post('/import', authMiddleware, async (req, res) => {
+  try {
+    const { shopId } = req.shopify;
+    const { url } = req.body;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+    
+    // Parse the URL to get store and product handle
+    // Formats: 
+    // - https://store.myshopify.com/products/handle
+    // - https://store.com/products/handle
+    // - https://store.myshopify.com/products/handle?variant=123
+    
+    let productUrl;
+    try {
+      productUrl = new URL(url);
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+    
+    const pathParts = productUrl.pathname.split('/');
+    const productsIndex = pathParts.indexOf('products');
+    
+    if (productsIndex === -1 || !pathParts[productsIndex + 1]) {
+      return res.status(400).json({ error: 'URL must be a Shopify product page (e.g., /products/product-name)' });
+    }
+    
+    const handle = pathParts[productsIndex + 1].split('?')[0];
+    const storeHost = productUrl.hostname;
+    
+    // Fetch product JSON from Shopify (public endpoint)
+    const jsonUrl = `https://${storeHost}/products/${handle}.json`;
+    console.log('Fetching:', jsonUrl);
+    
+    const response = await fetch(jsonUrl, {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Could not fetch product. Make sure it\'s a valid Shopify store.' });
+    }
+    
+    const data = await response.json();
+    const p = data.product;
+    
+    if (!p) {
+      return res.status(400).json({ error: 'Product not found' });
+    }
+    
+    // Save to database
+    const result = await pool.query(`
+      INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (shop_id, shopify_product_id) 
+      DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+      RETURNING *
+    `, [
+      shopId,
+      `imported_${p.id}`,
+      p.title,
+      p.body_html ? p.body_html.replace(/<[^>]*>/g, '').substring(0, 2000) : '',
+      p.variants[0]?.price || 0,
+      p.variants[0]?.compare_at_price || null,
+      p.image?.src || p.images?.[0]?.src || null,
+      p.product_type || null
+    ]);
+    
+    res.json({ success: true, product: result.rows[0] });
+    
+  } catch (error) {
+    console.error('Import error:', error);
+    res.status(500).json({ error: 'Failed to import product' });
+  }
+});
+
+/**
  * Add product manually
  */
 router.post('/', authMiddleware, async (req, res) => {
