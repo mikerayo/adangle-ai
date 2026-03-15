@@ -104,12 +104,21 @@ const api = {
 // ============================================
 
 function render() {
+  console.log('Render called, authenticated:', state.authenticated);
   const app = document.getElementById('app');
   
+  if (!app) {
+    console.error('App element not found!');
+    return;
+  }
+  
   if (!state.authenticated) {
+    console.log('Showing login page');
     app.innerHTML = renderLoginPage();
     return;
   }
+  
+  console.log('Rendering dashboard');
   
   app.innerHTML = `
     <div class="app-container">
@@ -605,13 +614,18 @@ function renderToasts() {
 // ============================================
 
 async function init() {
+  console.log('Init started');
+  
   // Get shop from URL (Shopify passes this when embedded)
   const urlParams = new URLSearchParams(window.location.search);
   const shop = urlParams.get('shop');
   const host = urlParams.get('host');
   
+  console.log('Shop from URL:', shop);
+  
   // If we have shop param, we're inside Shopify - auto authenticate
   if (shop) {
+    console.log('Embedded mode - auto authenticating');
     state.authenticated = true;
     state.shop = { domain: shop };
     state.usage = { angles_discovered: 0, copies_generated: 0 };
@@ -619,12 +633,17 @@ async function init() {
     
     // Register shop in backend
     try {
-      await fetch(`/api/auth/register?shop=${shop}&host=${host}`);
+      const regResponse = await fetch(`/api/auth/register?shop=${shop}&host=${host}`);
+      console.log('Registration response:', await regResponse.json());
     } catch (e) {
-      console.log('Backend registration:', e.message);
+      console.log('Backend registration error:', e.message);
     }
     
-    await loadProducts();
+    try {
+      await loadProducts();
+    } catch (e) {
+      console.log('Load products error:', e.message);
+    }
   } else {
     // Standalone mode - check session
     try {
