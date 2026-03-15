@@ -605,18 +605,42 @@ function renderToasts() {
 // ============================================
 
 async function init() {
-  try {
-    const session = await api.getSession();
-    if (session.authenticated) {
-      state.authenticated = true;
-      state.shop = session.shop;
-      state.usage = session.usage;
-      state.limits = session.limits;
-      await loadProducts();
+  // Get shop from URL (Shopify passes this when embedded)
+  const urlParams = new URLSearchParams(window.location.search);
+  const shop = urlParams.get('shop');
+  const host = urlParams.get('host');
+  
+  // If we have shop param, we're inside Shopify - auto authenticate
+  if (shop) {
+    state.authenticated = true;
+    state.shop = { domain: shop };
+    state.usage = { angles_discovered: 0, copies_generated: 0 };
+    state.limits = { angles_per_month: 3, copies_per_month: 15 };
+    
+    // Register shop in backend
+    try {
+      await fetch(`/api/auth/register?shop=${shop}&host=${host}`);
+    } catch (e) {
+      console.log('Backend registration:', e.message);
     }
-  } catch (e) {
-    console.log('Not authenticated');
+    
+    await loadProducts();
+  } else {
+    // Standalone mode - check session
+    try {
+      const session = await api.getSession();
+      if (session.authenticated) {
+        state.authenticated = true;
+        state.shop = session.shop;
+        state.usage = session.usage;
+        state.limits = session.limits;
+        await loadProducts();
+      }
+    } catch (e) {
+      console.log('Not authenticated');
+    }
   }
+  
   render();
 }
 

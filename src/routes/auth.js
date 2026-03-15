@@ -256,6 +256,36 @@ router.get('/session', async (req, res) => {
 });
 
 /**
+ * Register shop (for embedded/custom apps)
+ * GET /api/auth/register?shop=xxx
+ */
+router.get('/register', async (req, res) => {
+  const { shop, host } = req.query;
+  
+  if (!shop) {
+    return res.status(400).json({ error: 'Shop required' });
+  }
+  
+  try {
+    // Register or update shop in database
+    await pool.query(`
+      INSERT INTO shops (shopify_domain, access_token)
+      VALUES ($1, 'embedded_app')
+      ON CONFLICT (shopify_domain) 
+      DO UPDATE SET updated_at = NOW()
+    `, [shop]);
+    
+    // Set session
+    req.session.shop = shop;
+    
+    res.json({ success: true, shop });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+/**
  * Logout
  * POST /api/auth/logout
  */
