@@ -123,10 +123,10 @@ async function startServer() {
     await initDB();
     console.log('✅ Database initialized');
     
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`
 🎯 AdAngle AI Server Started
-   URL: http://localhost:${PORT}
+   URL: http://0.0.0.0:${PORT}
    Environment: ${process.env.NODE_ENV || 'development'}
       `);
     });
