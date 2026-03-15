@@ -636,23 +636,23 @@ async function init() {
   if (shop) {
     console.log('Embedded mode - auto authenticating');
     state.authenticated = true;
-    state.shop = { domain: shop };
+    state.shop = { domain: shop, plan: 'free' };
     state.usage = { angles_discovered: 0, copies_generated: 0 };
     state.limits = { angles_per_month: 3, copies_per_month: 15 };
     
-    // Register shop in backend
-    try {
-      const regResponse = await fetch(`/api/auth/register?shop=${shop}&host=${host}`);
-      console.log('Registration response:', await regResponse.json());
-    } catch (e) {
-      console.log('Backend registration error:', e.message);
-    }
+    // Render immediately so user sees something
+    console.log('First render');
+    render();
     
-    try {
-      await loadProducts();
-    } catch (e) {
-      console.log('Load products error:', e.message);
-    }
+    // Register shop in backend (don't wait)
+    fetch(`/api/auth/register?shop=${shop}&host=${host}`)
+      .then(r => r.json())
+      .then(d => console.log('Registered:', d))
+      .catch(e => console.log('Register error:', e));
+    
+    // Load products in background
+    loadProducts().catch(e => console.log('Products error:', e));
+    return; // Already rendered above
   } else {
     // Standalone mode - check session
     try {
