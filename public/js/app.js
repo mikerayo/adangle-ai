@@ -452,25 +452,30 @@ async function init() {
   }
 }
 
-function navigate(page) {
+async function navigate(page) {
   state.currentPage = page;
-  if (page === 'products') loadProducts().catch(console.log);
   render();
+  if (page === 'products') {
+    await loadProducts();
+  }
 }
 
 async function loadProducts() {
+  console.log('loadProducts started');
   state.loading.products = true;
   render();
   
   try {
     const data = await api.get('/products');
+    console.log('Products loaded:', data);
     state.products = data.products || [];
   } catch (e) {
-    console.log('Load products error:', e);
+    console.error('Load products error:', e);
     state.products = [];
   }
   
   state.loading.products = false;
+  console.log('loadProducts finished, products:', state.products.length);
   render();
 }
 
