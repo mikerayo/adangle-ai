@@ -2,141 +2,87 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
-const helmet = require('helmet');
-const compression = require('compression');
-const morgan = require('morgan');
 const path = require('path');
 
-// Database
-const { initDB, healthCheck: dbHealthCheck, closePool } = require('./src/config/database');
-
-// Routes
-const authRoutes = require('./src/routes/auth');
-const productRoutes = require('./src/routes/products');
-const angleRoutes = require('./src/routes/angles');
-const generateRoutes = require('./src/routes/generate');
-const billingRoutes = require('./src/routes/billing');
-
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Trust proxy
-app.set('trust proxy', 1);
+// Middleware básico
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.shopify.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https://openrouter.ai"],
-      frameAncestors: ["'self'", "https://*.myshopify.com", "https://admin.shopify.com"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-}));
-
-app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || 
-        origin.endsWith('.myshopify.com') || 
-        origin.includes('admin.shopify.com') ||
-        origin === process.env.SHOPIFY_HOST) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
-  credentials: true
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Session (memory store for now - upgrade to Redis later for scale)
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'adangle-dev-secret',
+  secret: process.env.SESSION_SECRET || 'dev-secret',
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     httpOnly: true,
-    sameSite: 'none',
     maxAge: 24 * 60 * 60 * 1000,
   },
-  name: 'adangle.sid',
 }));
 
 // Static files
-app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
-  etag: true,
-}));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/angles', angleRoutes);
-app.use('/api/generate', generateRoutes);
-app.use('/api/billing', billingRoutes);
+// Health check - simple
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
-// Health check
-app.get('/health', async (req, res) => {
+// Test DB connection
+app.get('/api/test-db', async (req, res) => {
   try {
-    const dbHealth = await dbHealthCheck();
-    res.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      database: dbHealth.connected,
-    });
+    const { pool } = require('./src/config/database');
+    const result = await pool.query('SELECT NOW()');
+    res.json({ db: 'connected', time: result.rows[0].now });
   } catch (e) {
-    res.json({ 
-      status: 'degraded', 
-      timestamp: new Date().toISOString(),
-      error: e.message,
-    });
+    res.json({ db: 'error', message: e.message });
   }
+});
+
+// API Routes (lazy load to avoid startup crash)
+app.use('/api/auth', (req, res, next) => {
+  const authRoutes = require('./src/routes/auth');
+  authRoutes(req, res, next);
+});
+
+app.use('/api/products', (req, res, next) => {
+  const routes = require('./src/routes/products');
+  routes(req, res, next);
+});
+
+app.use('/api/angles', (req, res, next) => {
+  const routes = require('./src/routes/angles');
+  routes(req, res, next);
+});
+
+app.use('/api/generate', (req, res, next) => {
+  const routes = require('./src/routes/generate');
+  routes(req, res, next);
+});
+
+app.use('/api/billing', (req, res, next) => {
+  const routes = require('./src/routes/billing');
+  routes(req, res, next);
 });
 
 // SPA fallback
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
+    return res.status(404).json({ error: 'Not found' });
   }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(err.status || 500).json({ error: 'Internal server error' });
+// Start immediately without waiting for DB
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🎯 AdAngle AI running on port ${PORT}`);
+  
+  // Init DB in background
+  const { initDB } = require('./src/config/database');
+  initDB()
+    .then(() => console.log('✅ Database ready'))
+    .catch(e => console.error('❌ DB init failed:', e.message));
 });
-
-// Start server
-const PORT = process.env.PORT || 3000;
-
-async function startServer() {
-  try {
-    await initDB();
-    console.log('✅ Database initialized');
-    
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`
-🎯 AdAngle AI Server Started
-   URL: http://0.0.0.0:${PORT}
-   Environment: ${process.env.NODE_ENV || 'development'}
-      `);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-startServer();
-
-module.exports = app;
-// Force rebuild Sun Mar 15 04:06:05 PM UTC 2026
