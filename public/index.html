@@ -3,41 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AdAngle AI - Find the Perfect Angle to Sell Any Product</title>
-  <meta name="description" content="Discover 10+ sales angles for any product and generate high-converting ad copy instantly.">
+  <title>AdAngle AI</title>
   
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- Styles -->
   <link rel="stylesheet" href="/css/app.css">
-  
-  <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   
-  <!-- Shopify App Bridge -->
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;">
+      <p>Loading...</p>
+    </div>
+  </div>
+
   <script>
-    // Get shop from URL params
+    // Initialize Shopify App Bridge and get session token
     const urlParams = new URLSearchParams(window.location.search);
-    const shop = urlParams.get('shop');
     const host = urlParams.get('host');
+    const shop = urlParams.get('shop');
     
-    // Store for later use
-    window.shopifyShop = shop;
-    window.shopifyHost = host;
+    window.SHOP = shop;
+    window.HOST = host;
     
-    // Initialize App Bridge if embedded in Shopify
-    if (window.shopify && host) {
-      // App Bridge 4.x is auto-initialized
-      console.log('Running inside Shopify Admin');
+    if (host && window.shopify) {
+      // We're inside Shopify Admin with App Bridge
+      window.shopify.idToken().then(token => {
+        window.SESSION_TOKEN = token;
+        console.log('Got session token');
+        loadApp();
+      }).catch(err => {
+        console.log('No session token, using direct mode');
+        loadApp();
+      });
+    } else {
+      loadApp();
+    }
+    
+    function loadApp() {
+      const script = document.createElement('script');
+      script.src = '/js/app.js';
+      document.body.appendChild(script);
     }
   </script>
-  <script src="/js/app.js" defer></script>
 </body>
 </html>

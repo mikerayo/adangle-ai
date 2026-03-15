@@ -270,7 +270,7 @@ router.get('/register', async (req, res) => {
     // Register or update shop in database
     await pool.query(`
       INSERT INTO shops (shopify_domain, access_token)
-      VALUES ($1, 'embedded_app')
+      VALUES ($1, 'embedded')
       ON CONFLICT (shopify_domain) 
       DO UPDATE SET updated_at = NOW()
     `, [shop]);
@@ -282,6 +282,91 @@ router.get('/register', async (req, res) => {
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+/**
+ * Save access token and sync products
+ * POST /api/auth/token?shop=xxx
+ */
+router.post('/token', async (req, res) => {
+  const { shop } = req.query;
+  const { token } = req.body;
+  
+  if (!shop || !token) {
+    return res.status(400).json({ error: 'Shop and token required' });
+  }
+  
+  if (!token.startsWith('shpat_')) {
+    return res.status(400).json({ error: 'Invalid token format. Must start with shpat_' });
+  }
+  
+  try {
+    // Verify token works by fetching shop info
+    const verifyResponse = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!verifyResponse.ok) {
+      return res.status(400).json({ error: 'Invalid token or insufficient permissions' });
+    }
+    
+    // Save token
+    const result = await pool.query(`
+      UPDATE shops SET access_token = $1, updated_at = NOW()
+      WHERE shopify_domain = $2
+      RETURNING id
+    `, [token, shop]);
+    
+    if (result.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO shops (shopify_domain, access_token)
+        VALUES ($1, $2)
+      `, [shop, token]);
+    }
+    
+    // Fetch and sync products
+    const productsResponse = await fetch(`https://${shop}/admin/api/2024-01/products.json?limit=50`, {
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    let productCount = 0;
+    if (productsResponse.ok) {
+      const productsData = await productsResponse.json();
+      const shopResult = await pool.query('SELECT id FROM shops WHERE shopify_domain = $1', [shop]);
+      const shopId = shopResult.rows[0].id;
+      
+      for (const p of productsData.products) {
+        await pool.query(`
+          INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (shop_id, shopify_product_id) 
+          DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
+        `, [
+          shopId,
+          p.id.toString(),
+          p.title,
+          p.body_html ? p.body_html.replace(/<[^>]*>/g, '').substring(0, 1000) : '',
+          p.variants[0]?.price || 0,
+          p.variants[0]?.compare_at_price || null,
+          p.image?.src || p.images?.[0]?.src || null,
+          p.product_type || null
+        ]);
+        productCount++;
+      }
+    }
+    
+    res.json({ success: true, products: productCount });
+    
+  } catch (error) {
+    console.error('Token save error:', error);
+    res.status(500).json({ error: 'Failed to save token' });
   }
 });
 

@@ -156,6 +156,9 @@ function renderSidebar() {
         <a class="nav-item ${state.currentPage === 'teleprompter' ? 'active' : ''}" onclick="navigate('teleprompter')">
           🎬 Teleprompter
         </a>
+        <a class="nav-item ${state.currentPage === 'settings' ? 'active' : ''}" onclick="navigate('settings')">
+          ⚙️ Settings
+        </a>
       </nav>
       <div class="sidebar-footer">
         <div class="plan-badge">🆓 FREE Plan</div>
@@ -191,8 +194,48 @@ function renderPage() {
     case 'product': return renderProductDetail();
     case 'generate': return renderGenerate();
     case 'teleprompter': return renderTeleprompterPage();
+    case 'settings': return renderSettings();
     default: return renderDashboard();
   }
+}
+
+function renderSettings() {
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h2>⚙️ Connect Shopify Store</h2>
+      </div>
+      <div class="card-body">
+        <p style="color: #666; margin-bottom: 20px;">
+          To automatically sync your products, you need to provide your Shopify Admin API access token.
+        </p>
+        
+        <div class="form-group">
+          <label><strong>How to get your token:</strong></label>
+          <ol style="color: #666; margin: 12px 0; padding-left: 20px; line-height: 1.8;">
+            <li>Go to <strong>Shopify Admin → Settings → Apps and sales channels</strong></li>
+            <li>Click <strong>"Develop apps"</strong></li>
+            <li>Click <strong>"Create an app"</strong> → Name it "AdAngle Access"</li>
+            <li>Go to <strong>Configuration → Admin API</strong></li>
+            <li>Enable <strong>"read_products"</strong> permission</li>
+            <li>Click <strong>"Install app"</strong></li>
+            <li>Copy the <strong>Admin API access token</strong> (starts with shpat_)</li>
+          </ol>
+        </div>
+        
+        <div class="form-group">
+          <label>Access Token</label>
+          <input type="password" id="access-token" class="input" placeholder="shpat_xxxxx..." value="${state.accessToken || ''}">
+        </div>
+        
+        <button class="btn btn-primary" onclick="saveToken()">
+          💾 Save & Sync Products
+        </button>
+        
+        ${state.syncStatus ? `<p style="margin-top: 16px; color: ${state.syncStatus.success ? 'green' : 'red'};">${state.syncStatus.message}</p>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function renderDashboard() {
@@ -684,6 +727,43 @@ function startTeleprompter() {
   } else {
     showToast('Enter a script first', 'error');
   }
+}
+
+async function saveToken() {
+  const tokenInput = document.getElementById('access-token');
+  const token = tokenInput?.value?.trim();
+  
+  if (!token || !token.startsWith('shpat_')) {
+    showToast('Please enter a valid token (starts with shpat_)', 'error');
+    return;
+  }
+  
+  state.syncStatus = { message: 'Saving and syncing...' };
+  render();
+  
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/api/auth/token?shop=${getShop()}`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+      xhr.onerror = () => reject(new Error('Network error'));
+      xhr.send(JSON.stringify({ token }));
+    });
+    
+    if (response.success) {
+      state.accessToken = token;
+      state.syncStatus = { success: true, message: `✅ Connected! Synced ${response.products || 0} products.` };
+      showToast('Products synced!', 'success');
+      loadProducts();
+    } else {
+      state.syncStatus = { success: false, message: `❌ ${response.error}` };
+    }
+  } catch (e) {
+    state.syncStatus = { success: false, message: `❌ ${e.message}` };
+  }
+  
+  render();
 }
 
 function showToast(message, type = 'info') {
