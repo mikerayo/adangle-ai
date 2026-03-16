@@ -70,6 +70,7 @@ app.use('/api/products', require('./src/routes/products'));
 app.use('/api/angles', require('./src/routes/angles'));
 app.use('/api/generate', require('./src/routes/generate'));
 app.use('/api/billing', require('./src/routes/billing'));
+app.use('/api/webhooks', require('./src/routes/webhooks'));
 
 // SPA fallback - serve index.html with shop context
 app.get('*', (req, res) => {
