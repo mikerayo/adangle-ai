@@ -66,7 +66,7 @@ https://adangle-ai-production.up.railway.app/privacy.html
 https://adangle-ai-production.up.railway.app/terms.html
 
 ## Support Email
-support@adangle.ai
+support.adangle@proton.me
 
 ## App URL
 https://adangle-ai-production.up.railway.app
