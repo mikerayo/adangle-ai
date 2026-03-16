@@ -327,4 +327,36 @@ router.get('/plans', (req, res) => {
   res.json({ plans: PLANS });
 });
 
+/**
+ * TEMP: Set plan for testing (remove in production)
+ * POST /api/billing/set-plan
+ */
+router.post('/set-plan', async (req, res) => {
+  const { shop, plan } = req.body;
+  if (!shop || !plan) {
+    return res.status(400).json({ error: 'shop and plan required' });
+  }
+  
+  const validPlans = ['free', 'trial', 'starter', 'pro', 'unlimited'];
+  if (!validPlans.includes(plan)) {
+    return res.status(400).json({ error: 'Invalid plan' });
+  }
+  
+  try {
+    const result = await pool.query(
+      'UPDATE shops SET plan = $1 WHERE shopify_domain = $2 RETURNING *',
+      [plan, shop]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Shop not found' });
+    }
+    
+    res.json({ success: true, shop, plan, updated: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
+
