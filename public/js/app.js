@@ -53,16 +53,38 @@ function getLLMName(modelOrStyle) {
   return 'AI';
 }
 
+// Get session token from App Bridge
+async function getSessionToken() {
+  if (window.shopify && window.shopify.idToken) {
+    try {
+      return await window.shopify.idToken();
+    } catch (e) {
+      console.log('Could not get session token:', e);
+    }
+  }
+  return null;
+}
+
 // API
 async function apiGet(endpoint) {
-  const res = await fetch(`${API_BASE}${endpoint}?shop=${getShop()}`);
+  const headers = { 'Content-Type': 'application/json' };
+  const token = await getSessionToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${endpoint}?shop=${getShop()}`, { headers });
   return res.json();
 }
 
 async function apiPost(endpoint, data) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = await getSessionToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   const res = await fetch(`${API_BASE}${endpoint}?shop=${getShop()}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(data),
   });
   return res.json();

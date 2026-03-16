@@ -1,13 +1,66 @@
 const { pool } = require('../config/database');
+const crypto = require('crypto');
+
+/**
+ * Verify Shopify session token (JWT)
+ */
+function verifySessionToken(token) {
+  try {
+    const [headerB64, payloadB64, signatureB64] = token.split('.');
+    
+    // Decode payload
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+    
+    // Verify signature
+    const secret = process.env.SHOPIFY_CLIENT_SECRET;
+    const data = `${headerB64}.${payloadB64}`;
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(data)
+      .digest('base64url');
+    
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      console.log('Session token expired');
+      return null;
+    }
+    
+    // Extract shop from dest or iss
+    const dest = payload.dest || payload.iss || '';
+    const shopMatch = dest.match(/https:\/\/([^\/]+)/);
+    const shop = shopMatch ? shopMatch[1] : null;
+    
+    return { shop, payload };
+  } catch (e) {
+    console.log('Session token verification failed:', e.message);
+    return null;
+  }
+}
 
 /**
  * Auth middleware - works with both OAuth and embedded apps
  */
 async function authMiddleware(req, res, next) {
-  console.log('Auth middleware - query:', req.query, 'headers:', req.headers['x-shopify-shop']);
+  console.log('Auth middleware - query:', req.query, 'headers auth:', !!req.headers.authorization);
   
-  // Try to get shop from multiple sources
-  const shop = req.query.shop || req.session?.shop || req.headers['x-shopify-shop'];
+  // Try session token from Authorization header first
+  const authHeader = req.headers.authorization;
+  let shop = null;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const verified = verifySessionToken(token);
+    if (verified && verified.shop) {
+      shop = verified.shop;
+      console.log('Shop from session token:', shop);
+    }
+  }
+  
+  // Fallback to query/session
+  if (!shop) {
+    shop = req.query.shop || req.session?.shop || req.headers['x-shopify-shop'];
+  }
   
   if (!shop) {
     console.log('No shop found in request');
