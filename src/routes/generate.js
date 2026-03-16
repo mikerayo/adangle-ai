@@ -81,8 +81,8 @@ router.post('/copies', authMiddleware, checkUsage('copies'), async (req, res) =>
     });
 
   } catch (error) {
-    console.error('Generate copies error:', error);
-    res.status(500).json({ error: 'Failed to generate copies' });
+    console.error('Generate copies error:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to generate copies: ' + error.message });
   }
 });
 
@@ -95,10 +95,10 @@ router.post('/video-script', authMiddleware, checkUsage('copies'), async (req, r
     const { shopId, plan } = req.shopify;
     const { angleId } = req.body;
 
-    // Check if plan allows video scripts
-    if (plan === 'free') {
-      return res.status(403).json({ error: 'Video scripts require Starter plan or higher' });
-    }
+    // Allow video scripts for testing (remove later)
+    // if (plan === 'free') {
+    //   return res.status(403).json({ error: 'Video scripts require Starter plan or higher' });
+    // }
 
     if (!angleId) {
       return res.status(400).json({ error: 'Angle ID required' });
