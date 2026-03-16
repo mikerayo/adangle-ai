@@ -327,10 +327,9 @@ router.get('/plans', (req, res) => {
   res.json({ plans: PLANS });
 });
 
-/**
- * TEMP: Set plan for testing (remove in production)
- * POST /api/billing/set-plan
- */
+// NOTE: Testing endpoint removed for production
+// If you need to test plans, uncomment the /set-plan route below
+/*
 router.post('/set-plan', async (req, res) => {
   const { shop, plan } = req.body;
   if (!shop || !plan) {
@@ -352,7 +351,6 @@ router.post('/set-plan', async (req, res) => {
       return res.status(404).json({ error: 'Shop not found' });
     }
     
-    // Also reset usage for testing
     const shopId = result.rows[0].id;
     await pool.query('DELETE FROM usage WHERE shop_id = $1', [shopId]);
     
@@ -361,6 +359,7 @@ router.post('/set-plan', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+*/
 
 module.exports = router;
 
