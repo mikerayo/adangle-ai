@@ -135,11 +135,12 @@ async function fetchShopifyProducts(shop, accessToken) {
  * Import ALL products from a store
  */
 router.post('/import-store', authMiddleware, async (req, res) => {
+  console.log('=== IMPORT STORE START ===');
   try {
     const { shopId } = req.shopify;
     let { store } = req.body;
     
-    console.log('Import store request:', { shopId, store });
+    console.log('Import store request:', { shopId, store, body: req.body });
     
     if (!store) {
       return res.status(400).json({ error: 'Store domain is required' });
@@ -192,8 +193,8 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     res.json({ success: true, count });
     
   } catch (error) {
-    console.error('Import store error:', error);
-    res.status(500).json({ error: 'Failed to import products' });
+    console.error('Import store error:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to import products: ' + error.message });
   }
 });
 
