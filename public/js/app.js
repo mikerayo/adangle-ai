@@ -95,36 +95,49 @@ function renderPage() {
 
 function renderDashboard() {
   const topProduct = state.products[0];
+  const isNewUser = state.stats.products === 0;
+  
+  // Show onboarding for new users
+  if (isNewUser) {
+    return renderOnboarding();
+  }
   
   return `
     <div class="page-header">
       <h1 class="page-title">Dashboard</h1>
-      <p class="page-subtitle">Your ad performance at a glance</p>
+      <p class="page-subtitle">Your AI-powered ad performance center</p>
     </div>
     
     <div class="bento-grid">
+      <!-- Stats Row -->
       <div class="bento-card stat-card">
         <span class="stat-label">Products</span>
         <span class="stat-value blue">${state.stats.products}</span>
+        <span class="stat-change">Active catalog</span>
       </div>
       
       <div class="bento-card stat-card">
         <span class="stat-label">Angles Discovered</span>
         <span class="stat-value pink">${state.stats.angles}</span>
+        <span class="stat-change">AI-generated insights</span>
       </div>
       
       <div class="bento-card stat-card">
         <span class="stat-label">Copies Generated</span>
         <span class="stat-value purple">${state.stats.copies}</span>
+        <span class="stat-change">Ready to use</span>
       </div>
       
       <div class="bento-card stat-card">
-        <span class="stat-label">Plan</span>
-        <span class="stat-value green" style="font-size: 28px;">Free</span>
+        <span class="stat-label">Current Plan</span>
+        <span class="stat-value green" style="font-size: 24px;">Free Trial</span>
+        <span class="stat-change" style="color: var(--accent-blue); cursor: pointer;">Upgrade →</span>
       </div>
       
+      <!-- Featured Product -->
       ${topProduct ? `
         <div class="bento-card span-2" style="cursor: pointer;" onclick="selectProduct(${topProduct.id})">
+          <span class="stat-label" style="margin-bottom: 16px; display: block;">FEATURED PRODUCT</span>
           <div class="product-card-large">
             <img src="${topProduct.image_url || 'https://via.placeholder.com/120'}" class="product-image-large" alt="">
             <div class="product-info-large">
@@ -132,28 +145,130 @@ function renderDashboard() {
               <div class="product-meta">
                 <span>$${topProduct.price}</span>
                 <span>•</span>
-                <span>${topProduct.angles_discovered || 0} angles</span>
+                <span>${topProduct.angles_discovered || 0} angles discovered</span>
               </div>
-              <button class="btn btn-secondary btn-sm" style="margin-top: 12px;">
-                View Angles →
+              <button class="btn btn-primary btn-sm" style="margin-top: 16px;">
+                ${topProduct.angles_discovered > 0 ? 'View Angles' : 'Discover Angles'} →
               </button>
             </div>
           </div>
         </div>
-      ` : `
-        <div class="bento-card span-2">
-          <div class="empty-state" style="padding: 20px;">
-            <p style="color: var(--text-secondary);">No products yet</p>
-            <button class="btn btn-primary btn-sm" onclick="navigate('products')">Add Product</button>
+      ` : ''}
+      
+      <!-- How It Works -->
+      <div class="bento-card span-2">
+        <span class="stat-label" style="margin-bottom: 16px; display: block;">HOW IT WORKS</span>
+        <div class="workflow-steps">
+          <div class="workflow-step">
+            <div class="workflow-icon">1</div>
+            <div class="workflow-content">
+              <strong>Add Product</strong>
+              <p>Import from your Shopify store or add manually</p>
+            </div>
+          </div>
+          <div class="workflow-step">
+            <div class="workflow-icon">2</div>
+            <div class="workflow-content">
+              <strong>Discover Angles</strong>
+              <p>AI finds 10 unique sales angles for each product</p>
+            </div>
+          </div>
+          <div class="workflow-step">
+            <div class="workflow-icon">3</div>
+            <div class="workflow-content">
+              <strong>Generate Copies</strong>
+              <p>Get 5 ad variations + video scripts instantly</p>
+            </div>
           </div>
         </div>
-      `}
+      </div>
       
+      <!-- Quick Actions -->
       <div class="bento-card span-2">
-        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Quick Actions</h3>
+        <span class="stat-label" style="margin-bottom: 16px; display: block;">QUICK ACTIONS</span>
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <button class="btn btn-secondary" onclick="navigate('products')">📦 View Products</button>
-          <button class="btn btn-secondary" onclick="state.showAddModal = true; render();">➕ Add Product</button>
+          <button class="btn btn-primary" onclick="navigate('products')">
+            📦 View All Products
+          </button>
+          <button class="btn btn-secondary" onclick="state.showAddModal = true; render();">
+            ➕ Import Products
+          </button>
+        </div>
+      </div>
+      
+      <!-- AI Models -->
+      <div class="bento-card span-2">
+        <span class="stat-label" style="margin-bottom: 16px; display: block;">POWERED BY</span>
+        <div class="ai-models">
+          <div class="ai-model">
+            <span class="ai-model-name">Claude 3.5</span>
+            <span class="ai-model-tag">Discovery</span>
+          </div>
+          <div class="ai-model">
+            <span class="ai-model-name">GPT-4o</span>
+            <span class="ai-model-tag">Structured</span>
+          </div>
+          <div class="ai-model">
+            <span class="ai-model-name">Llama 3.1</span>
+            <span class="ai-model-tag">Fast</span>
+          </div>
+          <div class="ai-model">
+            <span class="ai-model-name">Mixtral</span>
+            <span class="ai-model-tag">Creative</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderOnboarding() {
+  return `
+    <div class="onboarding-container">
+      <div class="onboarding-hero">
+        <div class="onboarding-icon">🎯</div>
+        <h1>Welcome to AdAngle</h1>
+        <p>Discover winning ad angles for any product using AI</p>
+      </div>
+      
+      <div class="onboarding-features">
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>AI-Powered Discovery</h3>
+          <p>Our AI analyzes your product and finds 10 unique sales angles targeting different audiences</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">✍️</div>
+          <h3>Multi-Model Generation</h3>
+          <p>Get 5 different ad copy styles generated by Claude, GPT-4, Llama & Mixtral simultaneously</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🎬</div>
+          <h3>Video Scripts</h3>
+          <p>Generate 30-second UGC scripts ready for TikTok and Instagram Reels</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Instant Results</h3>
+          <p>From product to ready-to-use ad copy in under 60 seconds</p>
+        </div>
+      </div>
+      
+      <div class="onboarding-cta">
+        <button class="btn btn-primary btn-lg" onclick="state.showAddModal = true; render();">
+          🚀 Import Your First Product
+        </button>
+        <p class="onboarding-hint">Your products will be imported automatically from your Shopify store</p>
+      </div>
+      
+      <div class="onboarding-trust">
+        <span>Trusted by 1,000+ Shopify merchants</span>
+        <div class="trust-logos">
+          <span>⭐⭐⭐⭐⭐</span>
+          <span style="color: var(--text-secondary);">4.9/5 on Shopify App Store</span>
         </div>
       </div>
     </div>
