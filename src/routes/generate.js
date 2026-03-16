@@ -49,8 +49,9 @@ router.post('/copies', authMiddleware, checkUsage('copies'), async (req, res) =>
     };
 
     // Generate copies using multiple models
-    console.log(`Generating copies for angle: ${angle.name}`);
-    const copies = await aiService.generateCopies(product, angle);
+    const { plan } = req.shopify;
+    console.log(`Generating copies for angle: ${angle.name} (plan: ${plan})`);
+    const copies = await aiService.generateCopies(product, angle, plan);
 
     // Return copies directly without saving (DB schema issue)
     const savedCopies = copies.filter(c => !c.error).map((c, i) => ({

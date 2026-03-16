@@ -15,6 +15,36 @@ const MODELS = {
   cheap: 'mistralai/mixtral-8x7b-instruct',
 };
 
+// Models available per plan
+const PLAN_MODELS = {
+  free: ['mistralai/mixtral-8x7b-instruct'],
+  trial: ['mistralai/mixtral-8x7b-instruct'],
+  starter: ['mistralai/mixtral-8x7b-instruct'],
+  pro: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct'],
+  unlimited: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct', 'mistralai/mixtral-8x7b-instruct'],
+};
+
+function getModelsForPlan(plan) {
+  return PLAN_MODELS[plan] || PLAN_MODELS.free;
+}
+
+function getDiscoveryModel(plan) {
+  const models = getModelsForPlan(plan);
+  // Use best available model for discovery
+  if (models.includes('anthropic/claude-3.5-sonnet')) return 'anthropic/claude-3.5-sonnet';
+  return models[0];
+}
+
+function getCopyModels(plan) {
+  const models = getModelsForPlan(plan);
+  // Return up to 5 models, repeating if needed
+  const result = [];
+  for (let i = 0; i < 5; i++) {
+    result.push(models[i % models.length]);
+  }
+  return result;
+}
+
 /**
  * Generate with specific model
  */
@@ -73,7 +103,10 @@ async function generate(model, prompt, options = {}) {
 /**
  * Discover 10 sales angles for a product
  */
-async function discoverAngles(product) {
+async function discoverAngles(product, plan = 'free') {
+  const model = getDiscoveryModel(plan);
+  console.log(`[AI] Using ${model} for discovery (plan: ${plan})`);
+  
   const prompt = `You are an expert marketer and consumer psychologist specializing in direct response advertising.
 
 PRODUCT TO ANALYZE:
@@ -117,7 +150,7 @@ OUTPUT FORMAT (JSON):
 
 Generate exactly 10 angles. Output ONLY valid JSON.`;
 
-  const response = await generate(MODELS.discovery, prompt, { temperature: 0.9 });
+  const response = await generate(model, prompt, { temperature: 0.9 });
   
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -134,7 +167,10 @@ Generate exactly 10 angles. Output ONLY valid JSON.`;
 /**
  * Generate 5 ad copies for a specific angle using multiple models
  */
-async function generateCopies(product, angle) {
+async function generateCopies(product, angle, plan = 'free') {
+  const availableModels = getCopyModels(plan);
+  console.log(`[AI] Using models for copies (plan: ${plan}):`, availableModels);
+  
   const basePrompt = `You are a world-class direct response copywriter for Facebook/TikTok/Instagram ads.
 
 PRODUCT:
@@ -169,13 +205,7 @@ OUTPUT ONLY THE AD COPY TEXT, nothing else.`;
     { name: 'urgency', instruction: '\n\nSTYLE: Urgency format. Create FOMO without being pushy.' },
   ];
 
-  const modelAssignments = [
-    MODELS.creative,
-    MODELS.structured,
-    MODELS.creative,
-    MODELS.fast,
-    MODELS.cheap,
-  ];
+  const modelAssignments = availableModels;
 
   const promises = styles.map((style, index) => 
     generate(modelAssignments[index], basePrompt + style.instruction, { temperature: 0.85 })
@@ -237,5 +267,7 @@ module.exports = {
   discoverAngles,
   generateCopies,
   generateVideoScript,
-  MODELS
+  getModelsForPlan,
+  MODELS,
+  PLAN_MODELS
 };

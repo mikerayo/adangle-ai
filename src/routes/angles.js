@@ -37,7 +37,8 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
     console.log('Found product:', product.title);
 
     // Discover angles using AI
-    console.log(`Discovering angles for: ${product.title}`);
+    const { plan } = req.shopify;
+    console.log(`Discovering angles for: ${product.title} (plan: ${plan})`);
     const aiProduct = {
       title: product.title,
       description: product.description,
@@ -45,7 +46,7 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
       compare_at_price: product.compare_at_price,
       category: product.category,
     };
-    const { angles } = await aiService.discoverAngles(aiProduct);
+    const { angles } = await aiService.discoverAngles(aiProduct, plan);
 
     if (!angles || angles.length === 0) {
       return res.status(500).json({ error: 'Failed to discover angles' });
