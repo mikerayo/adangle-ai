@@ -61,28 +61,45 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET;
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { shopId, shop, accessToken } = req.shopify;
+    const { shopId, shop } = req.shopify;
     
-    // If we have a real access token, try Shopify API
-    if (accessToken && accessToken !== 'embedded' && accessToken.startsWith('shp')) {
+    // Check if we have products already
+    const existingProducts = await pool.query(
+      'SELECT COUNT(*) as count FROM products WHERE shop_id = $1',
+      [shopId]
+    );
+    
+    // Auto-sync from the user's own store if no products yet
+    if (parseInt(existingProducts.rows[0].count) === 0 && shop) {
+      console.log('No products found, auto-syncing from:', shop);
       try {
-        const shopifyProducts = await fetchShopifyProducts(shop, accessToken);
+        // Try myshopify.com domain (public JSON endpoint)
+        const jsonUrl = `https://${shop}/products.json?limit=250`;
+        const data = await fetchJSON(jsonUrl);
         
-        // Save to our DB
-        for (const p of shopifyProducts) {
+        for (const p of (data.products || [])) {
           await pool.query(`
             INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (shop_id, shopify_product_id) 
-            DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
-          `, [shopId, p.id, p.title, p.description, p.price, p.compare_at_price, p.image_url, p.category]);
+            ON CONFLICT (shop_id, shopify_product_id) DO NOTHING
+          `, [
+            shopId,
+            `${shop}_${p.id}`,
+            p.title,
+            p.body_html ? p.body_html.replace(/<[^>]*>/g, '').substring(0, 2000) : '',
+            p.variants[0]?.price || 0,
+            p.variants[0]?.compare_at_price || null,
+            p.image?.src || p.images?.[0]?.src || null,
+            p.product_type || null
+          ]);
         }
+        console.log('Auto-synced', data.products?.length, 'products');
       } catch (e) {
-        console.log('Shopify API error, using local DB:', e.message);
+        console.log('Auto-sync failed:', e.message);
       }
     }
     
-    // Get from our database (includes Shopify synced + manually added)
+    // Get from our database
     const result = await pool.query(`
       SELECT p.*, COUNT(a.id)::int as angles_discovered
       FROM products p
@@ -94,7 +111,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
     res.json({ 
       products: result.rows,
-      message: result.rows.length === 0 ? 'Add your first product to get started' : null
+      message: result.rows.length === 0 ? 'No products found in your store' : null
     });
 
   } catch (error) {
