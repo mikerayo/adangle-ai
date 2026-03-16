@@ -1,7 +1,55 @@
 const express = require('express');
-const fetch = require('node-fetch');
+const https = require('https');
 const { pool } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
+
+// Simple fetch using https with redirect following
+function fetchJSON(urlString) {
+  return new Promise((resolve, reject) => {
+    const makeRequest = (url, redirectCount = 0) => {
+      if (redirectCount > 5) return reject(new Error('Too many redirects'));
+      
+      const req = https.get(url, { 
+        headers: { 
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; AdAngle/1.0)'
+        }
+      }, (res) => {
+        // Follow redirects
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          let newUrl = res.headers.location;
+          if (!newUrl.startsWith('http')) {
+            const parsed = new URL(url);
+            newUrl = `${parsed.protocol}//${parsed.host}${newUrl}`;
+          }
+          return makeRequest(newUrl, redirectCount + 1);
+        }
+        
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              reject(new Error('Invalid JSON response'));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        });
+      });
+      
+      req.on('error', reject);
+      req.setTimeout(15000, () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+    };
+    
+    makeRequest(urlString);
+  });
+}
 
 const router = express.Router();
 
@@ -104,25 +152,15 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${store}/products.json?limit=250`;
     console.log('Fetching all products from:', jsonUrl);
     
-    let response;
+    let data;
     try {
-      response = await fetch(jsonUrl, {
-        headers: { 
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      console.log('Fetch response status:', response.status);
+      data = await fetchJSON(jsonUrl);
+      console.log('Fetch success, products:', data.products?.length);
     } catch (fetchErr) {
-      console.error('Fetch error:', fetchErr);
+      console.error('Fetch error:', fetchErr.message);
       return res.status(400).json({ error: 'Could not connect to store: ' + fetchErr.message });
     }
     
-    if (!response.ok) {
-      return res.status(400).json({ error: 'Could not fetch products. Make sure it\'s a valid Shopify store.' });
-    }
-    
-    const data = await response.json();
     const products = data.products || [];
     console.log('Products found:', products.length);
     
@@ -198,18 +236,13 @@ router.post('/import', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${storeHost}/products/${handle}.json`;
     console.log('Fetching:', jsonUrl);
     
-    const response = await fetch(jsonUrl, {
-      headers: { 
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-    
-    if (!response.ok) {
-      return res.status(400).json({ error: 'Could not fetch product. Make sure it\'s a valid Shopify store.' });
+    let data;
+    try {
+      data = await fetchJSON(jsonUrl);
+    } catch (fetchErr) {
+      return res.status(400).json({ error: 'Could not fetch product: ' + fetchErr.message });
     }
     
-    const data = await response.json();
     const p = data.product;
     
     if (!p) {
