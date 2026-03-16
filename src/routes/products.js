@@ -1,41 +1,7 @@
 const express = require('express');
-const https = require('https');
+const fetch = require('node-fetch');
 const { pool } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
-
-// Helper to fetch JSON over HTTPS (follows redirects)
-function fetchJSON(url, maxRedirects = 5) {
-  return new Promise((resolve, reject) => {
-    const doRequest = (requestUrl, redirectsLeft) => {
-      https.get(requestUrl, { headers: { 'Accept': 'application/json', 'User-Agent': 'AdAngle/1.0' } }, (res) => {
-        // Handle redirects
-        if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) && res.headers.location) {
-          if (redirectsLeft <= 0) {
-            return reject(new Error('Too many redirects'));
-          }
-          let redirectUrl = res.headers.location;
-          if (!redirectUrl.startsWith('http')) {
-            const parsed = new URL(requestUrl);
-            redirectUrl = `${parsed.protocol}//${parsed.host}${redirectUrl}`;
-          }
-          return doRequest(redirectUrl, redirectsLeft - 1);
-        }
-        
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: JSON.parse(data) });
-          } catch (e) {
-            reject(new Error(`Invalid JSON: ${data.substring(0, 100)}`));
-          }
-        });
-      }).on('error', reject);
-    };
-    
-    doRequest(url, maxRedirects);
-  });
-}
 
 const router = express.Router();
 
@@ -140,8 +106,13 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     
     let response;
     try {
-      response = await fetchJSON(jsonUrl);
-      console.log('Fetch response ok:', response.ok);
+      response = await fetch(jsonUrl, {
+        headers: { 
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      console.log('Fetch response status:', response.status);
     } catch (fetchErr) {
       console.error('Fetch error:', fetchErr);
       return res.status(400).json({ error: 'Could not connect to store: ' + fetchErr.message });
@@ -151,7 +122,8 @@ router.post('/import-store', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Could not fetch products. Make sure it\'s a valid Shopify store.' });
     }
     
-    const products = response.data.products || [];
+    const data = await response.json();
+    const products = data.products || [];
     console.log('Products found:', products.length);
     
     if (products.length === 0) {
@@ -226,13 +198,19 @@ router.post('/import', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${storeHost}/products/${handle}.json`;
     console.log('Fetching:', jsonUrl);
     
-    const response = await fetchJSON(jsonUrl);
+    const response = await fetch(jsonUrl, {
+      headers: { 
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
     
     if (!response.ok) {
       return res.status(400).json({ error: 'Could not fetch product. Make sure it\'s a valid Shopify store.' });
     }
     
-    const p = response.data.product;
+    const data = await response.json();
+    const p = data.product;
     
     if (!p) {
       return res.status(400).json({ error: 'Product not found' });
