@@ -6,21 +6,7 @@
   <title>AdAngle AI</title>
   
   <!-- Shopify App Bridge -->
-  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-  <script>
-    // Initialize App Bridge
-    const urlParams = new URLSearchParams(window.location.search);
-    const host = urlParams.get('host');
-    const shop = urlParams.get('shop');
-    
-    if (window.shopify && host) {
-      window.appBridge = window.shopify.createApp({
-        apiKey: 'ba50e515e3ce0ed0d29d1d2e41a874db',
-        host: host,
-      });
-      console.log('App Bridge initialized');
-    }
-  </script>
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js?apiKey=ba50e515e3ce0ed0d29d1d2e41a874db"></script>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
