@@ -189,11 +189,12 @@ function renderPricing() {
           <p class="pricing-desc">For agencies & power users</p>
           
           <ul class="pricing-features">
-            <li><span class="feature-icon">✓</span> Unlimited discoveries</li>
-            <li><span class="feature-icon">✓</span> Unlimited ad copies</li>
+            <li><span class="feature-icon">✓</span> <strong>20 angles</strong> per product</li>
+            <li><span class="feature-icon">✓</span> <strong>5 hook variations</strong> per angle</li>
+            <li><span class="feature-icon">✓</span> <strong>7 languages</strong> (EN, ES, FR, DE...)</li>
+            <li><span class="feature-icon">✓</span> <strong>Bulk generation</strong> all products</li>
+            <li><span class="feature-icon">✓</span> <strong>Priority queue</strong> - faster generation</li>
             <li><span class="feature-icon">✓</span> <span class="llm-badge claude" style="font-size: 9px;">Claude</span> <span class="llm-badge gpt" style="font-size: 9px;">GPT-4o</span> <span class="llm-badge llama" style="font-size: 9px;">Llama</span> <span class="llm-badge mixtral" style="font-size: 9px;">Mixtral</span></li>
-            <li><span class="feature-icon">✓</span> Unlimited video scripts</li>
-            <li><span class="feature-icon">✓</span> Priority support</li>
           </ul>
           
           <button class="btn btn-secondary btn-block" onclick="selectPlan('unlimited')">

@@ -24,6 +24,19 @@ const PLAN_MODELS = {
   unlimited: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct', 'mistralai/mixtral-8x7b-instruct'],
 };
 
+// Plan features
+const PLAN_FEATURES = {
+  free: { angles: 10, languages: ['en'], hookVariations: 1, priority: false, bulk: false },
+  trial: { angles: 10, languages: ['en'], hookVariations: 1, priority: false, bulk: false },
+  starter: { angles: 10, languages: ['en'], hookVariations: 1, priority: false, bulk: false },
+  pro: { angles: 10, languages: ['en', 'es'], hookVariations: 1, priority: false, bulk: false },
+  unlimited: { angles: 20, languages: ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl'], hookVariations: 5, priority: true, bulk: true },
+};
+
+function getPlanFeatures(plan) {
+  return PLAN_FEATURES[plan] || PLAN_FEATURES.free;
+}
+
 function getModelsForPlan(plan) {
   return PLAN_MODELS[plan] || PLAN_MODELS.free;
 }
@@ -103,9 +116,13 @@ async function generate(model, prompt, options = {}) {
 /**
  * Discover 10 sales angles for a product
  */
-async function discoverAngles(product, plan = 'free') {
+async function discoverAngles(product, plan = 'free', options = {}) {
   const model = getDiscoveryModel(plan);
-  console.log(`[AI] Using ${model} for discovery (plan: ${plan})`);
+  const features = getPlanFeatures(plan);
+  const numAngles = features.angles;
+  const language = options.language || 'en';
+  
+  console.log(`[AI] Using ${model} for discovery (plan: ${plan}, angles: ${numAngles}, lang: ${language})`);
   
   const prompt = `You are an expert marketer and consumer psychologist specializing in direct response advertising.
 
@@ -133,6 +150,7 @@ RULES:
 - Include at least 1 SKEPTIC angle (for non-believers)
 - NO medical claims
 - Focus on benefits, not features
+${language !== 'en' ? `- OUTPUT IN ${language.toUpperCase()} LANGUAGE` : ''}
 
 OUTPUT FORMAT (JSON):
 {
@@ -148,7 +166,7 @@ OUTPUT FORMAT (JSON):
   ]
 }
 
-Generate exactly 10 angles. Output ONLY valid JSON.`;
+Generate exactly ${numAngles} angles. Output ONLY valid JSON.`;
 
   const response = await generate(model, prompt, { temperature: 0.9 });
   
@@ -167,9 +185,11 @@ Generate exactly 10 angles. Output ONLY valid JSON.`;
 /**
  * Generate 5 ad copies for a specific angle using multiple models
  */
-async function generateCopies(product, angle, plan = 'free') {
+async function generateCopies(product, angle, plan = 'free', options = {}) {
   const availableModels = getCopyModels(plan);
-  console.log(`[AI] Using models for copies (plan: ${plan}):`, availableModels);
+  const features = getPlanFeatures(plan);
+  const language = options.language || 'en';
+  console.log(`[AI] Using models for copies (plan: ${plan}, lang: ${language}):`, availableModels);
   
   const basePrompt = `You are a world-class direct response copywriter for Facebook/TikTok/Instagram ads.
 
@@ -194,6 +214,7 @@ WRITE ONE AD COPY following these rules:
 - End with a soft CTA
 - NO medical claims
 - NO excessive emojis (max 2-3)
+${language !== 'en' ? `- WRITE IN ${language.toUpperCase()} LANGUAGE` : ''}
 
 OUTPUT ONLY THE AD COPY TEXT, nothing else.`;
 
@@ -262,12 +283,78 @@ OUTPUT THE SCRIPT ONLY.`;
   return generate(MODELS.structured, prompt, { temperature: 0.8 });
 }
 
+/**
+ * Generate hook variations (Unlimited only)
+ */
+async function generateHookVariations(product, angle, count = 5) {
+  const prompt = `You are an expert copywriter. Generate ${count} different hook variations for this ad angle.
+
+PRODUCT: ${product.title}
+ANGLE: ${angle.name}
+TARGET: ${angle.audience}
+ORIGINAL HOOK: "${angle.hook}"
+
+Generate ${count} COMPLETELY different hooks. Each should:
+- Stop the scroll
+- Be 1-2 sentences max
+- Hit the same pain point from a different angle
+- Use different emotional triggers
+
+OUTPUT FORMAT (JSON):
+{
+  "hooks": [
+    "Hook 1...",
+    "Hook 2...",
+    "Hook 3...",
+    "Hook 4...",
+    "Hook 5..."
+  ]
+}
+
+Output ONLY valid JSON.`;
+
+  const response = await generate(MODELS.creative, prompt, { temperature: 0.95 });
+  
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error('No JSON found');
+  } catch (e) {
+    console.error('Failed to parse hooks:', e);
+    return { hooks: [angle.hook] };
+  }
+}
+
+/**
+ * Bulk discover angles for multiple products (Unlimited only)
+ */
+async function bulkDiscoverAngles(products, plan = 'unlimited') {
+  const results = [];
+  
+  for (const product of products) {
+    try {
+      const { angles } = await discoverAngles(product, plan);
+      results.push({ product: product.title, angles, success: true });
+    } catch (e) {
+      results.push({ product: product.title, error: e.message, success: false });
+    }
+  }
+  
+  return results;
+}
+
 module.exports = {
   generate,
   discoverAngles,
   generateCopies,
   generateVideoScript,
+  generateHookVariations,
+  bulkDiscoverAngles,
   getModelsForPlan,
+  getPlanFeatures,
   MODELS,
-  PLAN_MODELS
+  PLAN_MODELS,
+  PLAN_FEATURES
 };
