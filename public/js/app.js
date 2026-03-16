@@ -413,7 +413,7 @@ async function importAllFromStore() {
   try {
     const response = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', \`\${API_BASE}/api/products/import-store?shop=\${getShop()}\`);
+      xhr.open('POST', `${API_BASE}/api/products/import-store?shop=${getShop()}`);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.timeout = 30000;
       xhr.onload = () => {
@@ -429,7 +429,7 @@ async function importAllFromStore() {
       xhr.send(JSON.stringify({ store }));
     });
     
-    showToast(\`Imported \${response.count} products!\`, 'success');
+    showToast(`Imported ${response.count} products!`, 'success');
     closeModal();
     loadProducts();
     
@@ -457,7 +457,7 @@ async function importFromUrl() {
   try {
     const response = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', \`\${API_BASE}/api/products/import?shop=\${getShop()}\`);
+      xhr.open('POST', `${API_BASE}/api/products/import?shop=${getShop()}`);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.timeout = 15000;
       xhr.onload = () => {
@@ -497,7 +497,7 @@ async function addProductManually() {
   try {
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', \`\${API_BASE}/api/products?shop=\${getShop()}\`);
+      xhr.open('POST', `${API_BASE}/api/products?shop=${getShop()}`);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -608,7 +608,7 @@ function renderGenerate() {
           <div class="copy-card">
             <div class="copy-header">
               <span class="copy-style">${c.style}</span>
-              <button class="btn btn-ghost btn-sm" onclick="copyText(\`${escapeForJs(c.content)}\`)">📋 Copy</button>
+              <button class="btn btn-ghost btn-sm" onclick="copyText(`${escapeForJs(c.content)}`)">📋 Copy</button>
             </div>
             <div class="copy-content">${escapeHtml(c.content)}</div>
           </div>
@@ -622,8 +622,8 @@ function renderGenerate() {
         <div class="script-header">
           <span>30-Second UGC Script</span>
           <div>
-            <button class="btn btn-ghost btn-sm" onclick="copyText(\`${escapeForJs(state.videoScript.content || state.videoScript)}\`)">📋 Copy</button>
-            <button class="btn btn-primary btn-sm" onclick="openTeleprompter(\`${escapeForJs(state.videoScript.content || state.videoScript)}\`)">📱 Teleprompter</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyText(`${escapeForJs(state.videoScript.content || state.videoScript)}`)">📋 Copy</button>
+            <button class="btn btn-primary btn-sm" onclick="openTeleprompter(`${escapeForJs(state.videoScript.content || state.videoScript)}`)">📱 Teleprompter</button>
           </div>
         </div>
         <pre class="script-content">${escapeHtml(state.videoScript.content || state.videoScript)}</pre>
@@ -980,7 +980,7 @@ function escapeHtml(text) {
 
 function escapeForJs(text) {
   if (!text) return '';
-  return String(text).replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+  return String(text).replace(/\\/g,'\\\\').replace(/`/g,'\`').replace(/\$/g,'\\$');
 }
 
 function attachEventListeners() {}
