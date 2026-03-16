@@ -485,9 +485,20 @@ function renderProductDetail() {
         <h1>${escapeHtml(p.title)}</h1>
         <p style="color: var(--text-secondary);">$${p.price}</p>
       </div>
-      <button class="btn btn-primary" onclick="discoverAngles(${p.id})" style="margin-left: auto;" ${state.loading.angles ? 'disabled' : ''}>
-        ${state.loading.angles ? '⏳ Discovering...' : '🔍 Discover Angles'}
-      </button>
+      <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+        <select id="language-select" class="input" style="width: auto; padding: 8px 12px;">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="de">Deutsch</option>
+          <option value="it">Italiano</option>
+          <option value="pt">Português</option>
+          <option value="nl">Nederlands</option>
+        </select>
+        <button class="btn btn-primary" onclick="discoverAngles(${p.id})" ${state.loading.angles ? 'disabled' : ''}>
+          ${state.loading.angles ? '⏳ Discovering...' : '🔍 Discover Angles'}
+        </button>
+      </div>
     </div>
     
     ${renderTerminal()}
@@ -739,10 +750,14 @@ async function discoverAngles(productId) {
   state.loading.angles = true;
   terminalLogs = [];
   terminalVisible = true;
+  
+  const languageSelect = document.getElementById('language-select');
+  const language = languageSelect?.value || 'en';
+  
   render();
   
   addTerminalLog('system', '🚀 Starting angle discovery...');
-  addTerminalLog('info', `Product ID: ${productId}`);
+  addTerminalLog('info', `Product ID: ${productId}, Language: ${language}`);
   
   await sleep(300);
   addTerminalLog('model', '🤖 Initializing Claude 3.5 Sonnet...');
@@ -756,7 +771,7 @@ async function discoverAngles(productId) {
   addTerminalLog('thinking', '💭 Crafting unique hooks...');
   
   try {
-    const data = await apiPost('/api/angles/discover', { productId });
+    const data = await apiPost('/api/angles/discover', { productId, language });
     
     if (data.angles) {
       addTerminalLog('success', `✅ Claude 3.5 completed!`);

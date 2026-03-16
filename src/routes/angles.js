@@ -12,13 +12,29 @@ const router = express.Router();
  */
 router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) => {
   try {
-    const { shopId } = req.shopify;
-    const { productId } = req.body;
+    const { shopId, plan } = req.shopify;
+    const { productId, language = 'en' } = req.body;
 
-    console.log('Discover angles for productId:', productId, 'shopId:', shopId);
+    console.log('Discover angles for productId:', productId, 'shopId:', shopId, 'plan:', plan, 'language:', language);
 
     if (!productId) {
       return res.status(400).json({ error: 'Product ID required' });
+    }
+    
+    // Check language access based on plan
+    const planLanguages = {
+      free: ['en'],
+      trial: ['en'],
+      starter: ['en'],
+      pro: ['en', 'es'],
+      unlimited: ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl']
+    };
+    const allowedLanguages = planLanguages[plan] || ['en'];
+    if (!allowedLanguages.includes(language)) {
+      return res.status(403).json({ 
+        error: `${language.toUpperCase()} language requires upgrade`,
+        upgrade: true
+      });
     }
 
     // Get product from our DB (already synced)
@@ -37,8 +53,7 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
     console.log('Found product:', product.title);
 
     // Discover angles using AI
-    const { plan } = req.shopify;
-    console.log(`Discovering angles for: ${product.title} (plan: ${plan})`);
+    console.log(`Discovering angles for: ${product.title} (plan: ${plan}, language: ${language})`);
     const aiProduct = {
       title: product.title,
       description: product.description,
@@ -46,7 +61,7 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
       compare_at_price: product.compare_at_price,
       category: product.category,
     };
-    const { angles } = await aiService.discoverAngles(aiProduct, plan);
+    const { angles } = await aiService.discoverAngles(aiProduct, plan, { language });
 
     if (!angles || angles.length === 0) {
       return res.status(500).json({ error: 'Failed to discover angles' });

@@ -230,4 +230,103 @@ router.post('/regenerate', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * Generate hook variations (Unlimited only)
+ * POST /api/generate/hooks
+ */
+router.post('/hooks', authMiddleware, async (req, res) => {
+  try {
+    const { shopId, plan } = req.shopify;
+    const { angleId } = req.body;
+
+    // Check if Unlimited
+    if (plan !== 'unlimited') {
+      return res.status(403).json({ 
+        error: 'Hook variations require Unlimited plan',
+        upgrade: true 
+      });
+    }
+
+    // Get angle and product
+    const result = await pool.query(`
+      SELECT a.*, p.title, p.description, p.price
+      FROM angles a
+      JOIN products p ON a.product_id = p.id
+      WHERE a.id = $1 AND p.shop_id = $2
+    `, [angleId, shopId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Angle not found' });
+    }
+
+    const data = result.rows[0];
+    const product = { title: data.title, description: data.description, price: data.price };
+    const angle = { name: data.name, audience: data.audience, hook: data.hook };
+
+    console.log(`Generating hook variations for: ${angle.name}`);
+    const { hooks } = await aiService.generateHookVariations(product, angle, 5);
+
+    res.json({ success: true, hooks });
+
+  } catch (error) {
+    console.error('Hook variations error:', error);
+    res.status(500).json({ error: 'Failed to generate hooks: ' + error.message });
+  }
+});
+
+/**
+ * Bulk discover angles (Unlimited only)
+ * POST /api/generate/bulk
+ */
+router.post('/bulk', authMiddleware, async (req, res) => {
+  try {
+    const { shopId, plan } = req.shopify;
+
+    // Check if Unlimited
+    if (plan !== 'unlimited') {
+      return res.status(403).json({ 
+        error: 'Bulk generation requires Unlimited plan',
+        upgrade: true 
+      });
+    }
+
+    // Get all products for this shop
+    const productsResult = await pool.query(
+      'SELECT id, title, description, price, compare_at_price, category FROM products WHERE shop_id = $1',
+      [shopId]
+    );
+
+    if (productsResult.rows.length === 0) {
+      return res.status(400).json({ error: 'No products found' });
+    }
+
+    console.log(`Bulk generating for ${productsResult.rows.length} products`);
+
+    const results = [];
+    for (const product of productsResult.rows) {
+      try {
+        const { angles } = await aiService.discoverAngles(product, plan);
+        
+        // Save angles
+        for (const angle of (angles || [])) {
+          await pool.query(`
+            INSERT INTO angles (product_id, name, audience, pain_point, hook, objection, emotion)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `, [product.id, angle.name, angle.audience, angle.pain_point, angle.hook, angle.objection, angle.emotion]);
+        }
+        
+        results.push({ product: product.title, angles: angles?.length || 0, success: true });
+      } catch (e) {
+        results.push({ product: product.title, error: e.message, success: false });
+      }
+    }
+
+    res.json({ success: true, results, total: results.length });
+
+  } catch (error) {
+    console.error('Bulk generation error:', error);
+    res.status(500).json({ error: 'Bulk generation failed: ' + error.message });
+  }
+});
+
 module.exports = router;
