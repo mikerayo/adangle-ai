@@ -121,7 +121,6 @@ function render() {
       </main>
     </div>
     ${renderToasts()}
-    ${state.showAddProduct ? renderAddProductModal() : ''}
   `;
   
   attachEventListeners();
@@ -853,35 +852,13 @@ async function generateScript(angleId) {
 }
 
 function showAddProductModal() {
-  state.showAddProduct = true;
+  state.showAddModal = true;
   render();
 }
 
 function hideAddProductModal() {
-  state.showAddProduct = false;
+  state.showAddModal = false;
   render();
-}
-
-async function addProduct() {
-  const title = document.getElementById('product-title')?.value;
-  const description = document.getElementById('product-description')?.value;
-  const price = document.getElementById('product-price')?.value;
-  const compare_at_price = document.getElementById('product-compare')?.value;
-  const image_url = document.getElementById('product-image')?.value;
-  
-  if (!title) {
-    showToast('Product name is required', 'error');
-    return;
-  }
-  
-  try {
-    await api.post('/products', { title, description, price, compare_at_price, image_url });
-    showToast('Product added!', 'success');
-    hideAddProductModal();
-    loadProducts();
-  } catch (e) {
-    showToast(e.message || 'Failed to add product', 'error');
-  }
 }
 
 function copyText(text) {
