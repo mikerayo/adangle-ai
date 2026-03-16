@@ -333,9 +333,7 @@ function renderProductDetail() {
     
     ${renderTerminal()}
     
-    ${state.loading.angles && !terminalVisible ? `
-      <div class="loading"><div class="loading-spinner"></div> AI is analyzing your product...</div>
-    ` : !state.loading.angles && state.angles.length === 0 ? `
+    ${state.loading.angles ? '' : state.angles.length === 0 ? `
       <div class="empty-state">
         <div class="empty-icon">🎯</div>
         <h2>No Angles Yet</h2>
@@ -391,9 +389,7 @@ function renderGenerate() {
     
     ${renderTerminal()}
     
-    ${state.loading.copies && !terminalVisible ? `
-      <div class="loading"><div class="loading-spinner"></div> AI is generating copies...</div>
-    ` : !state.loading.copies ? `
+    ${state.loading.copies ? '' : `
       ${state.copies.length > 0 ? `
         <h2 class="section-title">📝 Generated Ad Copies</h2>
         <div class="copies-container">
@@ -420,7 +416,7 @@ function renderGenerate() {
         </div>
       ` : ''}
       
-      ${!state.copies.length && !state.videoScript ? `
+      ${!state.copies.length && !state.videoScript && !terminalVisible ? `
         <div class="empty-state">
           <p>Select an action to generate content</p>
         </div>
