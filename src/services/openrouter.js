@@ -1,7 +1,8 @@
 /**
- * OpenRouter Service - Direct fetch (no SDK)
- * Avoids OpenAI SDK's OPENAI_API_KEY requirement
+ * OpenRouter Service - Direct https (no SDK/fetch)
  */
+
+const https = require('https');
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -18,29 +19,55 @@ const MODELS = {
  * Generate with specific model
  */
 async function generate(model, prompt, options = {}) {
-  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.SHOPIFY_HOST || 'https://adangle.ai',
-      'X-Title': 'AdAngle AI',
-    },
-    body: JSON.stringify({
+  console.log(`[AI] Calling ${model}...`);
+  
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: prompt }],
       temperature: options.temperature || 0.8,
       max_tokens: options.maxTokens || 2000,
-    }),
+    });
+
+    const req = https.request({
+      hostname: 'openrouter.ai',
+      path: '/api/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'HTTP-Referer': process.env.SHOPIFY_HOST || 'https://adangle.ai',
+        'X-Title': 'AdAngle AI',
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const json = JSON.parse(data);
+            console.log(`[AI] ${model} completed`);
+            resolve(json.choices[0].message.content);
+          } catch (e) {
+            reject(new Error('Invalid JSON from OpenRouter'));
+          }
+        } else {
+          console.error(`[AI] ${model} error:`, data);
+          reject(new Error(`OpenRouter error ${res.statusCode}: ${data.substring(0, 200)}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(60000, () => {
+      req.destroy();
+      reject(new Error('OpenRouter timeout'));
+    });
+    
+    req.write(body);
+    req.end();
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenRouter error: ${error}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
 }
 
 /**
