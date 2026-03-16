@@ -851,6 +851,115 @@ textarea.input {
   margin-top: 8px;
 }
 
+/* AI Terminal */
+.ai-terminal {
+  background: #0c0c0c;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.ai-terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #151515;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.ai-terminal-dot.red { background: #ff5f56; }
+.ai-terminal-dot.yellow { background: #ffbd2e; }
+.ai-terminal-dot.green { background: #27ca40; }
+
+.ai-terminal-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+}
+
+.ai-terminal-body {
+  padding: 16px;
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ai-terminal-line {
+  margin-bottom: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-terminal-line.system {
+  color: var(--text-muted);
+}
+
+.ai-terminal-line.info {
+  color: var(--accent-blue);
+}
+
+.ai-terminal-line.success {
+  color: var(--accent-green);
+}
+
+.ai-terminal-line.model {
+  color: var(--accent-pink);
+}
+
+.ai-terminal-line.thinking {
+  color: var(--accent-purple);
+}
+
+.ai-terminal-timestamp {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 65px;
+}
+
+.ai-terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--accent-green);
+  animation: blink 1s infinite;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.ai-terminal-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+}
+
 /* Upgrade Badge */
 .upgrade-badge {
   background: var(--gradient-2);

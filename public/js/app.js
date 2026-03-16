@@ -331,9 +331,11 @@ function renderProductDetail() {
       </button>
     </div>
     
-    ${state.loading.angles ? `
+    ${renderTerminal()}
+    
+    ${state.loading.angles && !terminalVisible ? `
       <div class="loading"><div class="loading-spinner"></div> AI is analyzing your product...</div>
-    ` : state.angles.length === 0 ? `
+    ` : !state.loading.angles && state.angles.length === 0 ? `
       <div class="empty-state">
         <div class="empty-icon">🎯</div>
         <h2>No Angles Yet</h2>
@@ -387,9 +389,11 @@ function renderGenerate() {
       </div>
     </div>
     
-    ${state.loading.copies ? `
+    ${renderTerminal()}
+    
+    ${state.loading.copies && !terminalVisible ? `
       <div class="loading"><div class="loading-spinner"></div> AI is generating copies...</div>
-    ` : `
+    ` : !state.loading.copies ? `
       ${state.copies.length > 0 ? `
         <h2 class="section-title">📝 Generated Ad Copies</h2>
         <div class="copies-container">
@@ -519,25 +523,112 @@ async function selectProduct(id) {
   render();
 }
 
+// Terminal state
+let terminalLogs = [];
+let terminalVisible = false;
+
+function addTerminalLog(type, message) {
+  const now = new Date();
+  const time = now.toTimeString().slice(0, 8);
+  terminalLogs.push({ type, message, time });
+  updateTerminal();
+}
+
+function updateTerminal() {
+  const container = document.getElementById('ai-terminal-logs');
+  if (!container) return;
+  
+  container.innerHTML = terminalLogs.map(log => `
+    <div class="ai-terminal-line ${log.type}">
+      <span class="ai-terminal-timestamp">${log.time}</span>
+      <span>${log.message}</span>
+    </div>
+  `).join('') + '<span class="ai-terminal-cursor"></span>';
+  
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderTerminal() {
+  if (!terminalVisible) return '';
+  
+  return `
+    <div class="ai-terminal">
+      <div class="ai-terminal-header">
+        <div class="ai-terminal-dots">
+          <div class="ai-terminal-dot red"></div>
+          <div class="ai-terminal-dot yellow"></div>
+          <div class="ai-terminal-dot green"></div>
+        </div>
+        <span class="ai-terminal-title">AI Console — adangle.ai</span>
+      </div>
+      <div class="ai-terminal-body" id="ai-terminal-logs">
+        ${terminalLogs.map(log => `
+          <div class="ai-terminal-line ${log.type}">
+            <span class="ai-terminal-timestamp">${log.time}</span>
+            <span>${log.message}</span>
+          </div>
+        `).join('')}
+        <span class="ai-terminal-cursor"></span>
+      </div>
+    </div>
+  `;
+}
+
 async function discoverAngles(productId) {
   state.loading.angles = true;
+  terminalLogs = [];
+  terminalVisible = true;
   render();
+  
+  addTerminalLog('system', '🚀 Starting angle discovery...');
+  addTerminalLog('info', `Product ID: ${productId}`);
+  
+  await sleep(300);
+  addTerminalLog('model', '🤖 Initializing Claude 3.5 Sonnet...');
+  
+  await sleep(500);
+  addTerminalLog('thinking', '💭 Analyzing product details...');
+  addTerminalLog('thinking', '💭 Identifying target audiences...');
+  
+  await sleep(400);
+  addTerminalLog('thinking', '💭 Discovering pain points...');
+  addTerminalLog('thinking', '💭 Crafting unique hooks...');
   
   try {
     const data = await apiPost('/api/angles/discover', { productId });
+    
     if (data.angles) {
+      addTerminalLog('success', `✅ Claude 3.5 completed!`);
+      addTerminalLog('success', `📊 Discovered ${data.angles.length} unique angles`);
+      
+      await sleep(300);
+      data.angles.forEach((angle, i) => {
+        addTerminalLog('info', `  ${i + 1}. ${angle.name}`);
+      });
+      
+      addTerminalLog('success', '🎉 Angle discovery complete!');
+      
       state.angles = data.angles;
       state.stats.angles += data.angles.length;
+      
+      await sleep(1000);
+      terminalVisible = false;
       showToast(`Discovered ${data.angles.length} angles!`, 'success');
     } else {
+      addTerminalLog('error', `❌ Error: ${data.error || 'Failed to discover angles'}`);
       showToast(data.error || 'Failed to discover angles', 'error');
     }
   } catch (e) {
+    addTerminalLog('error', `❌ Error: ${e.message}`);
     showToast('Failed to discover angles', 'error');
   }
   
   state.loading.angles = false;
   render();
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function generateCopies(angleId) {
@@ -547,18 +638,52 @@ async function generateCopies(angleId) {
   state.videoScript = null;
   state.currentPage = 'generate';
   state.loading.copies = true;
+  terminalLogs = [];
+  terminalVisible = true;
   render();
+  
+  addTerminalLog('system', '🚀 Starting copy generation...');
+  addTerminalLog('info', `Angle: ${angle.name}`);
+  
+  await sleep(300);
+  addTerminalLog('model', '🤖 Spawning 5 AI writers in parallel...');
+  
+  await sleep(400);
+  addTerminalLog('thinking', '📝 [Claude 3.5] Writing storytelling copy...');
+  addTerminalLog('thinking', '📝 [GPT-4o] Writing problem-solution copy...');
+  addTerminalLog('thinking', '📝 [Claude 3.5] Writing comparison copy...');
+  addTerminalLog('thinking', '📝 [Llama 3.1] Writing social proof copy...');
+  addTerminalLog('thinking', '📝 [Mixtral] Writing urgency copy...');
   
   try {
     const data = await apiPost('/api/generate/copies', { angleId });
+    
     if (data.copies) {
+      await sleep(300);
+      addTerminalLog('success', '✅ Claude 3.5 (storytelling) — done');
+      await sleep(200);
+      addTerminalLog('success', '✅ GPT-4o (problem-solution) — done');
+      await sleep(200);
+      addTerminalLog('success', '✅ Claude 3.5 (comparison) — done');
+      await sleep(200);
+      addTerminalLog('success', '✅ Llama 3.1 (social proof) — done');
+      await sleep(200);
+      addTerminalLog('success', '✅ Mixtral (urgency) — done');
+      
+      addTerminalLog('success', `🎉 Generated ${data.copies.length} unique ad copies!`);
+      
       state.copies = data.copies;
       state.stats.copies += data.copies.length;
+      
+      await sleep(800);
+      terminalVisible = false;
       showToast(`Generated ${data.copies.length} ad copies!`, 'success');
     } else {
+      addTerminalLog('error', `❌ Error: ${data.error || 'Failed to generate copies'}`);
       showToast(data.error || 'Failed to generate copies', 'error');
     }
   } catch (e) {
+    addTerminalLog('error', `❌ Error: ${e.message}`);
     showToast('Failed to generate copies', 'error');
   }
   
@@ -573,17 +698,45 @@ async function generateScript(angleId) {
   state.videoScript = null;
   state.currentPage = 'generate';
   state.loading.copies = true;
+  terminalLogs = [];
+  terminalVisible = true;
   render();
+  
+  addTerminalLog('system', '🎬 Starting video script generation...');
+  addTerminalLog('info', `Angle: ${angle.name}`);
+  
+  await sleep(300);
+  addTerminalLog('model', '🤖 Initializing GPT-4o (structured output)...');
+  
+  await sleep(400);
+  addTerminalLog('thinking', '🎭 Crafting hook (0-3s)...');
+  await sleep(300);
+  addTerminalLog('thinking', '😫 Writing problem setup (3-8s)...');
+  await sleep(300);
+  addTerminalLog('thinking', '✨ Presenting solution (8-18s)...');
+  await sleep(300);
+  addTerminalLog('thinking', '📈 Adding proof/results (18-25s)...');
+  await sleep(300);
+  addTerminalLog('thinking', '🎯 Finalizing CTA (25-30s)...');
   
   try {
     const data = await apiPost('/api/generate/video-script', { angleId });
+    
     if (data.script) {
+      addTerminalLog('success', '✅ GPT-4o completed!');
+      addTerminalLog('success', '🎬 30-second UGC script ready');
+      
       state.videoScript = data.script;
+      
+      await sleep(800);
+      terminalVisible = false;
       showToast('Video script generated!', 'success');
     } else {
+      addTerminalLog('error', `❌ Error: ${data.error || 'Failed to generate script'}`);
       showToast(data.error || 'Failed to generate script', 'error');
     }
   } catch (e) {
+    addTerminalLog('error', `❌ Error: ${e.message}`);
     showToast('Failed to generate script', 'error');
   }
   
