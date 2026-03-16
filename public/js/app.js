@@ -121,6 +121,18 @@ function renderPricing() {
         <p>Scale your ad creation with AI-powered angles and copies</p>
       </div>
       
+      <!-- Trial Banner -->
+      <div class="trial-banner">
+        <div class="trial-content">
+          <div class="trial-badge">🎉 LIMITED OFFER</div>
+          <h2>Try AdAngle for just $1</h2>
+          <p>Get 10 AI-generated ad copies to test the platform. After 7 days, continues as Starter ($19/mo). Cancel anytime.</p>
+          <button class="btn btn-primary btn-lg" onclick="selectPlan('trial')">
+            Start $1 Trial →
+          </button>
+        </div>
+      </div>
+      
       <div class="pricing-grid">
         <!-- Starter -->
         <div class="pricing-card">
