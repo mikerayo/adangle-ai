@@ -152,12 +152,6 @@ function renderSidebar() {
         <a class="nav-item ${state.currentPage === 'products' ? 'active' : ''}" onclick="navigate('products')">
           📦 Products
         </a>
-        <a class="nav-item ${state.currentPage === 'teleprompter' ? 'active' : ''}" onclick="navigate('teleprompter')">
-          🎬 Teleprompter
-        </a>
-        <a class="nav-item ${state.currentPage === 'settings' ? 'active' : ''}" onclick="navigate('settings')">
-          ⚙️ Settings
-        </a>
       </nav>
       <div class="sidebar-footer">
         <div class="plan-badge">🆓 FREE Plan</div>
@@ -192,8 +186,6 @@ function renderPage() {
     case 'products': return renderProducts();
     case 'product': return renderProductDetail();
     case 'generate': return renderGenerate();
-    case 'teleprompter': return renderTeleprompterPage();
-    case 'settings': return renderSettings();
     default: return renderDashboard();
   }
 }
