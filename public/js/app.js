@@ -93,6 +93,7 @@ function renderNav() {
       <div class="nav-links">
         <a class="nav-link ${state.currentPage === 'dashboard' ? 'active' : ''}" onclick="navigate('dashboard')">Dashboard</a>
         <a class="nav-link ${state.currentPage === 'products' ? 'active' : ''}" onclick="navigate('products')">Products</a>
+        <a class="nav-link ${state.currentPage === 'pricing' ? 'active' : ''}" onclick="navigate('pricing')">Pricing</a>
       </div>
       <div class="nav-actions">
         <span style="color: var(--text-secondary); font-size: 13px;">Free Plan</span>
@@ -107,8 +108,115 @@ function renderPage() {
     case 'products': return renderProducts();
     case 'product': return renderProductDetail();
     case 'generate': return renderGenerate();
+    case 'pricing': return renderPricing();
     default: return renderDashboard();
   }
+}
+
+function renderPricing() {
+  return `
+    <div class="pricing-container">
+      <div class="pricing-header">
+        <h1>Choose Your Plan</h1>
+        <p>Scale your ad creation with AI-powered angles and copies</p>
+      </div>
+      
+      <div class="pricing-grid">
+        <!-- Starter -->
+        <div class="pricing-card">
+          <div class="pricing-badge">STARTER</div>
+          <div class="pricing-price">
+            <span class="price-amount">$19</span>
+            <span class="price-period">/month</span>
+          </div>
+          <p class="pricing-desc">Perfect for getting started</p>
+          
+          <ul class="pricing-features">
+            <li><span class="feature-icon">✓</span> 10 angle discoveries/month</li>
+            <li><span class="feature-icon">✓</span> 50 ad copies/month</li>
+            <li><span class="feature-icon">✓</span> <span class="llm-badge mixtral" style="font-size: 9px;">Mixtral</span> AI model</li>
+            <li><span class="feature-icon dim">✗</span> <span class="dim">Video scripts</span></li>
+            <li><span class="feature-icon dim">✗</span> <span class="dim">Premium models</span></li>
+          </ul>
+          
+          <button class="btn btn-secondary btn-block" onclick="selectPlan('starter')">
+            Get Started
+          </button>
+        </div>
+        
+        <!-- Pro -->
+        <div class="pricing-card featured">
+          <div class="pricing-popular">MOST POPULAR</div>
+          <div class="pricing-badge">PRO</div>
+          <div class="pricing-price">
+            <span class="price-amount">$49</span>
+            <span class="price-period">/month</span>
+          </div>
+          <p class="pricing-desc">For serious marketers</p>
+          
+          <ul class="pricing-features">
+            <li><span class="feature-icon">✓</span> 50 angle discoveries/month</li>
+            <li><span class="feature-icon">✓</span> Unlimited ad copies</li>
+            <li><span class="feature-icon">✓</span> <span class="llm-badge claude" style="font-size: 9px;">Claude</span> <span class="llm-badge gpt" style="font-size: 9px;">GPT-4o</span> <span class="llm-badge llama" style="font-size: 9px;">Llama</span></li>
+            <li><span class="feature-icon">✓</span> Video scripts</li>
+            <li><span class="feature-icon dim">✗</span> <span class="dim">All 4 models</span></li>
+          </ul>
+          
+          <button class="btn btn-primary btn-block" onclick="selectPlan('pro')">
+            Upgrade to Pro
+          </button>
+        </div>
+        
+        <!-- Unlimited -->
+        <div class="pricing-card">
+          <div class="pricing-badge">UNLIMITED</div>
+          <div class="pricing-price">
+            <span class="price-amount">$99</span>
+            <span class="price-period">/month</span>
+          </div>
+          <p class="pricing-desc">For agencies & power users</p>
+          
+          <ul class="pricing-features">
+            <li><span class="feature-icon">✓</span> Unlimited discoveries</li>
+            <li><span class="feature-icon">✓</span> Unlimited ad copies</li>
+            <li><span class="feature-icon">✓</span> <span class="llm-badge claude" style="font-size: 9px;">Claude</span> <span class="llm-badge gpt" style="font-size: 9px;">GPT-4o</span> <span class="llm-badge llama" style="font-size: 9px;">Llama</span> <span class="llm-badge mixtral" style="font-size: 9px;">Mixtral</span></li>
+            <li><span class="feature-icon">✓</span> Unlimited video scripts</li>
+            <li><span class="feature-icon">✓</span> Priority support</li>
+          </ul>
+          
+          <button class="btn btn-secondary btn-block" onclick="selectPlan('unlimited')">
+            Go Unlimited
+          </button>
+        </div>
+      </div>
+      
+      <div class="pricing-faq">
+        <h2>Frequently Asked Questions</h2>
+        <div class="faq-grid">
+          <div class="faq-item">
+            <h3>What's an "angle discovery"?</h3>
+            <p>Each time AI analyzes a product and finds 10 unique sales angles, that counts as 1 discovery.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Can I upgrade anytime?</h3>
+            <p>Yes! Upgrade or downgrade at any time. Changes take effect immediately.</p>
+          </div>
+          <div class="faq-item">
+            <h3>What AI models do you use?</h3>
+            <p>We use Claude 3.5, GPT-4o, Llama 3.1, and Mixtral - the best models for marketing copy.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Is there a free trial?</h3>
+            <p>Yes! Start with 3 free angle discoveries to test the platform.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectPlan(plan) {
+  showToast('Billing integration coming soon!', 'info');
 }
 
 function renderDashboard() {
