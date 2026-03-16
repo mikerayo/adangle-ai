@@ -108,6 +108,8 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     const { shopId } = req.shopify;
     let { store } = req.body;
     
+    console.log('Import store request:', { shopId, store });
+    
     if (!store) {
       return res.status(400).json({ error: 'Store domain is required' });
     }
@@ -119,13 +121,21 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${store}/products.json?limit=250`;
     console.log('Fetching all products from:', jsonUrl);
     
-    const response = await fetchJSON(jsonUrl);
+    let response;
+    try {
+      response = await fetchJSON(jsonUrl);
+      console.log('Fetch response ok:', response.ok);
+    } catch (fetchErr) {
+      console.error('Fetch error:', fetchErr);
+      return res.status(400).json({ error: 'Could not connect to store: ' + fetchErr.message });
+    }
     
     if (!response.ok) {
       return res.status(400).json({ error: 'Could not fetch products. Make sure it\'s a valid Shopify store.' });
     }
     
     const products = response.data.products || [];
+    console.log('Products found:', products.length);
     
     if (products.length === 0) {
       return res.status(400).json({ error: 'No products found in this store' });
