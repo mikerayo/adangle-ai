@@ -12,40 +12,40 @@ const router = express.Router();
  */
 router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) => {
   try {
-    const { shop, accessToken, shopId } = req.shopify;
+    const { shopId } = req.shopify;
     const { productId } = req.body;
+
+    console.log('Discover angles for productId:', productId, 'shopId:', shopId);
 
     if (!productId) {
       return res.status(400).json({ error: 'Product ID required' });
     }
 
-    // Fetch product from Shopify
-    const product = await shopifyService.getProduct(shop, accessToken, productId);
+    // Get product from our DB (already synced)
+    const productResult = await pool.query(
+      'SELECT * FROM products WHERE id = $1 AND shop_id = $2',
+      [productId, shopId]
+    );
 
-    // Save product to DB if not exists
-    const productResult = await pool.query(`
-      INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category, data)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (shop_id, shopify_product_id) 
-      DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
-      RETURNING id
-    `, [
-      shopId,
-      productId,
-      product.title,
-      product.description,
-      product.price,
-      product.compare_at_price,
-      product.image_url,
-      product.category,
-      JSON.stringify(product.data)
-    ]);
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
-    const dbProductId = productResult.rows[0].id;
+    const product = productResult.rows[0];
+    const dbProductId = product.id;
+
+    console.log('Found product:', product.title);
 
     // Discover angles using AI
     console.log(`Discovering angles for: ${product.title}`);
-    const { angles } = await aiService.discoverAngles(product);
+    const aiProduct = {
+      title: product.title,
+      description: product.description,
+      price: product.price,
+      compare_at_price: product.compare_at_price,
+      category: product.category,
+    };
+    const { angles } = await aiService.discoverAngles(aiProduct);
 
     if (!angles || angles.length === 0) {
       return res.status(500).json({ error: 'Failed to discover angles' });
