@@ -4,14 +4,19 @@ const { pool } = require('../config/database');
  * Auth middleware - works with both OAuth and embedded apps
  */
 async function authMiddleware(req, res, next) {
+  console.log('Auth middleware - query:', req.query, 'headers:', req.headers['x-shopify-shop']);
+  
   // Try to get shop from multiple sources
   const shop = req.query.shop || req.session?.shop || req.headers['x-shopify-shop'];
   
   if (!shop) {
-    return res.status(401).json({ error: 'Not authenticated' });
+    console.log('No shop found in request');
+    return res.status(401).json({ error: 'Not authenticated - no shop' });
   }
 
   try {
+    console.log('Looking up shop:', shop);
+    
     // Get or create shop in database
     let result = await pool.query(
       'SELECT id, shopify_domain, access_token, plan FROM shops WHERE shopify_domain = $1',
@@ -19,6 +24,7 @@ async function authMiddleware(req, res, next) {
     );
 
     if (result.rows.length === 0) {
+      console.log('Shop not found, creating:', shop);
       // Auto-register shop for embedded apps
       result = await pool.query(`
         INSERT INTO shops (shopify_domain, access_token, plan)
@@ -29,6 +35,7 @@ async function authMiddleware(req, res, next) {
     }
 
     const shopData = result.rows[0];
+    console.log('Shop data:', shopData);
     
     // Attach shop info to request
     req.shopify = {
@@ -39,12 +46,14 @@ async function authMiddleware(req, res, next) {
     };
     
     // Save to session for future requests
-    req.session.shop = shop;
+    if (req.session) {
+      req.session.shop = shop;
+    }
 
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('Auth middleware error:', error.message, error.stack);
+    res.status(500).json({ error: 'Authentication failed: ' + error.message });
   }
 }
 
