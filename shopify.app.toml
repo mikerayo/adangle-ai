@@ -1,7 +1,7 @@
 # Shopify App Configuration
 
 name = "AdAngle AI"
-client_id = "ba50e515e3ce6ed0d29d1d2e41a874db"
+client_id = "ba50e515e3ce0ed0d29d1d2e41a874db"
 application_url = "https://adangle-ai-production.up.railway.app"
 embedded = true
 
