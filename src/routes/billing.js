@@ -352,7 +352,11 @@ router.post('/set-plan', async (req, res) => {
       return res.status(404).json({ error: 'Shop not found' });
     }
     
-    res.json({ success: true, shop, plan, updated: result.rows[0] });
+    // Also reset usage for testing
+    const shopId = result.rows[0].id;
+    await pool.query('DELETE FROM usage WHERE shop_id = $1', [shopId]);
+    
+    res.json({ success: true, shop, plan, updated: result.rows[0], usageReset: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
