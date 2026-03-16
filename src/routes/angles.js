@@ -107,7 +107,7 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
 
   } catch (error) {
     console.error('Discover angles error:', error.message, error.stack);
-    res.status(500).json({ error: 'Failed to discover angles: ' + error.message });
+    res.status(500).json({ error: 'Discover failed: ' + error.message });
   }
 });
 

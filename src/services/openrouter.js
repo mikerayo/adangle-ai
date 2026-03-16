@@ -168,7 +168,8 @@ OUTPUT FORMAT (JSON):
 
 Generate exactly ${numAngles} angles. Output ONLY valid JSON.`;
 
-  const response = await generate(model, prompt, { temperature: 0.9 });
+  const maxTokens = numAngles > 10 ? 4000 : 2000;
+  const response = await generate(model, prompt, { temperature: 0.9, maxTokens });
   
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
