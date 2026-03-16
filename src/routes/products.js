@@ -3,20 +3,37 @@ const https = require('https');
 const { pool } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
-// Helper to fetch JSON over HTTPS
-function fetchJSON(url) {
+// Helper to fetch JSON over HTTPS (follows redirects)
+function fetchJSON(url, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: JSON.parse(data) });
-        } catch (e) {
-          reject(e);
+    const doRequest = (requestUrl, redirectsLeft) => {
+      https.get(requestUrl, { headers: { 'Accept': 'application/json', 'User-Agent': 'AdAngle/1.0' } }, (res) => {
+        // Handle redirects
+        if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) && res.headers.location) {
+          if (redirectsLeft <= 0) {
+            return reject(new Error('Too many redirects'));
+          }
+          let redirectUrl = res.headers.location;
+          if (!redirectUrl.startsWith('http')) {
+            const parsed = new URL(requestUrl);
+            redirectUrl = `${parsed.protocol}//${parsed.host}${redirectUrl}`;
+          }
+          return doRequest(redirectUrl, redirectsLeft - 1);
         }
-      });
-    }).on('error', reject);
+        
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: JSON.parse(data) });
+          } catch (e) {
+            reject(new Error(`Invalid JSON: ${data.substring(0, 100)}`));
+          }
+        });
+      }).on('error', reject);
+    };
+    
+    doRequest(url, maxRedirects);
   });
 }
 
