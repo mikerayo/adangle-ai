@@ -150,7 +150,7 @@ router.get('/callback', async (req, res) => {
       INSERT INTO shops (shopify_domain, access_token)
       VALUES ($1, $2)
       ON CONFLICT (shopify_domain) 
-      DO UPDATE SET access_token = $2, updated_at = NOW()
+      DO UPDATE SET access_token = $2
       RETURNING id
     `, [shop, access_token]);
 
@@ -316,7 +316,7 @@ router.post('/token', async (req, res) => {
     
     // Save token
     const result = await pool.query(`
-      UPDATE shops SET access_token = $1, updated_at = NOW()
+      UPDATE shops SET access_token = $1
       WHERE shopify_domain = $2
       RETURNING id
     `, [token, shop]);

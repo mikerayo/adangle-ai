@@ -74,7 +74,7 @@ router.get('/', authMiddleware, async (req, res) => {
             INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (shop_id, shopify_product_id) 
-            DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+            DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
           `, [shopId, p.id, p.title, p.description, p.price, p.compare_at_price, p.image_url, p.category]);
         }
       } catch (e) {
@@ -176,7 +176,7 @@ router.post('/import-store', authMiddleware, async (req, res) => {
         INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (shop_id, shopify_product_id) 
-        DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+        DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
       `, [
         shopId,
         `${store}_${p.id}`,
@@ -255,7 +255,7 @@ router.post('/import', authMiddleware, async (req, res) => {
       INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (shop_id, shopify_product_id) 
-      DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+      DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
       RETURNING *
     `, [
       shopId,
@@ -355,7 +355,7 @@ router.post('/sync', authMiddleware, async (req, res) => {
         INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (shop_id, shopify_product_id) 
-        DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7, updated_at = NOW()
+        DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
       `, [shopId, p.id, p.title, p.description, p.price, p.compare_at_price, p.image_url, p.category]);
     }
     
