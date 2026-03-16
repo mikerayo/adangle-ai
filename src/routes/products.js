@@ -1,6 +1,24 @@
 const express = require('express');
+const https = require('https');
 const { pool } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
+
+// Helper to fetch JSON over HTTPS
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: JSON.parse(data) });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).on('error', reject);
+  });
+}
 
 const router = express.Router();
 
@@ -101,16 +119,13 @@ router.post('/import-store', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${store}/products.json?limit=250`;
     console.log('Fetching all products from:', jsonUrl);
     
-    const response = await fetch(jsonUrl, {
-      headers: { 'Accept': 'application/json' }
-    });
+    const response = await fetchJSON(jsonUrl);
     
     if (!response.ok) {
       return res.status(400).json({ error: 'Could not fetch products. Make sure it\'s a valid Shopify store.' });
     }
     
-    const data = await response.json();
-    const products = data.products || [];
+    const products = response.data.products || [];
     
     if (products.length === 0) {
       return res.status(400).json({ error: 'No products found in this store' });
@@ -184,16 +199,13 @@ router.post('/import', authMiddleware, async (req, res) => {
     const jsonUrl = `https://${storeHost}/products/${handle}.json`;
     console.log('Fetching:', jsonUrl);
     
-    const response = await fetch(jsonUrl, {
-      headers: { 'Accept': 'application/json' }
-    });
+    const response = await fetchJSON(jsonUrl);
     
     if (!response.ok) {
       return res.status(400).json({ error: 'Could not fetch product. Make sure it\'s a valid Shopify store.' });
     }
     
-    const data = await response.json();
-    const p = data.product;
+    const p = response.data.product;
     
     if (!p) {
       return res.status(400).json({ error: 'Product not found' });
