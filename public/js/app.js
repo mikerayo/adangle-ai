@@ -648,47 +648,6 @@ function renderTeleprompterPage() {
   `;
 }
 
-function renderAddProductModal() {
-  return `
-    <div class="modal-overlay" onclick="hideAddProductModal()">
-      <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
-          <h2>Add Product</h2>
-          <button class="btn btn-ghost" onclick="hideAddProductModal()">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>Product Name *</label>
-            <input type="text" id="product-title" class="input" placeholder="e.g., Back Stretcher">
-          </div>
-          <div class="form-group">
-            <label>Description</label>
-            <textarea id="product-description" class="textarea" rows="3" placeholder="Describe your product..."></textarea>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Price ($)</label>
-              <input type="number" id="product-price" class="input" placeholder="29.99">
-            </div>
-            <div class="form-group">
-              <label>Compare Price ($)</label>
-              <input type="number" id="product-compare" class="input" placeholder="59.99">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Image URL</label>
-            <input type="text" id="product-image" class="input" placeholder="https://...">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="hideAddProductModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="addProduct()">Add Product</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
 function renderToasts() {
   return '<div id="toast-container" class="toast-container"></div>';
 }
