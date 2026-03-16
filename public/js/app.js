@@ -227,8 +227,28 @@ function renderPricing() {
   `;
 }
 
-function selectPlan(plan) {
-  showToast('Billing integration coming soon!', 'info');
+async function selectPlan(plan) {
+  showToast('Processing...', 'info');
+  
+  try {
+    const response = await apiPost('/api/billing/subscribe', { plan });
+    
+    if (response.confirmationUrl) {
+      // Redirect to Shopify payment page
+      window.top.location.href = response.confirmationUrl;
+    } else if (response.authUrl) {
+      // Need to re-authenticate
+      showToast('Please reinstall the app to enable billing', 'error');
+      setTimeout(() => {
+        window.top.location.href = response.authUrl;
+      }, 2000);
+    } else {
+      showToast(response.error || 'Failed to start subscription', 'error');
+    }
+  } catch (e) {
+    console.error('Subscribe error:', e);
+    showToast('Failed to process subscription', 'error');
+  }
 }
 
 function renderDashboard() {
@@ -981,8 +1001,33 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 3000);
 }
 
+// Check for upgrade success message
+function checkUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const upgraded = params.get('upgraded');
+  const error = params.get('error');
+  
+  if (upgraded) {
+    showToast(`🎉 Upgraded to ${upgraded} plan!`, 'success');
+    // Clean URL
+    window.history.replaceState({}, '', `/?shop=${getShop()}`);
+  }
+  
+  if (error) {
+    const errorMessages = {
+      'declined': 'Payment was declined',
+      'missing_params': 'Missing parameters',
+      'no_token': 'Please reinstall the app',
+      'activation_failed': 'Failed to activate subscription',
+    };
+    showToast(errorMessages[error] || `Error: ${error}`, 'error');
+    window.history.replaceState({}, '', `/?shop=${getShop()}`);
+  }
+}
+
 // Init
 async function init() {
+  checkUrlParams();
   render();
   await loadProducts();
 }

@@ -1,87 +1,117 @@
 const express = require('express');
+const https = require('https');
 const { pool } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-/**
- * Shopify Billing API Reference:
- * https://shopify.dev/docs/apps/billing
- * 
- * For recurring charges (subscriptions):
- * https://shopify.dev/docs/api/admin-rest/2025-01/resources/recurringapplicationcharge
- */
+const APP_URL = process.env.SHOPIFY_HOST || 'https://adangle-ai-production.up.railway.app';
 
+/**
+ * Plans configuration
+ */
 const PLANS = {
+  trial: {
+    name: 'AdAngle Trial',
+    price: 1.00,
+    trialDays: 0,
+    interval: 'EVERY_30_DAYS',
+    copies: 10,
+    angles: 3,
+    models: ['mixtral'],
+    autoUpgrade: 'starter',
+  },
   starter: {
     name: 'AdAngle Starter',
-    price: 29.00,
-    trialDays: 7,
-    features: '30 angle discoveries, unlimited copies, video scripts'
+    price: 19.00,
+    trialDays: 0,
+    interval: 'EVERY_30_DAYS',
+    copies: 50,
+    angles: 10,
+    models: ['mixtral'],
+    videoScripts: false,
   },
   pro: {
     name: 'AdAngle Pro',
-    price: 79.00,
-    trialDays: 7,
-    features: 'Unlimited everything, priority support'
-  }
+    price: 49.00,
+    trialDays: 0,
+    interval: 'EVERY_30_DAYS',
+    copies: -1, // unlimited
+    angles: 50,
+    models: ['claude', 'gpt4o', 'llama'],
+    videoScripts: true,
+  },
+  unlimited: {
+    name: 'AdAngle Unlimited',
+    price: 99.00,
+    trialDays: 0,
+    interval: 'EVERY_30_DAYS',
+    copies: -1,
+    angles: -1,
+    models: ['claude', 'gpt4o', 'llama', 'mixtral'],
+    videoScripts: true,
+    priority: true,
+  },
 };
 
 /**
- * Get current billing status
+ * HTTPS request helper
+ */
+function shopifyRequest(shop, accessToken, path, method = 'GET', body = null) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: shop,
+      path: `/admin/api/2024-01${path}`,
+      method,
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+    };
+    
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(data) });
+        } catch {
+          resolve({ status: res.statusCode, data });
+        }
+      });
+    });
+    
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+/**
+ * Get billing status
  * GET /api/billing/status
  */
 router.get('/status', authMiddleware, async (req, res) => {
   try {
-    const { shopId, shop, accessToken } = req.shopify;
-
-    // Get shop plan from our DB
-    const shopResult = await pool.query(
-      'SELECT plan, plan_expires_at FROM shops WHERE id = $1',
-      [shopId]
-    );
-    const shopData = shopResult.rows[0];
-
-    // Get current month usage
+    const { shopId, plan } = req.shopify;
+    
+    // Get usage
     const month = new Date().toISOString().slice(0, 7);
     const usageResult = await pool.query(
       'SELECT angles_discovered, copies_generated FROM usage WHERE shop_id = $1 AND month = $2',
       [shopId, month]
     );
     const usage = usageResult.rows[0] || { angles_discovered: 0, copies_generated: 0 };
-
-    // Get active Shopify subscription
-    let activeSubscription = null;
-    try {
-      const response = await fetch(
-        `https://${shop}/admin/api/2025-01/recurring_application_charges.json`,
-        {
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        activeSubscription = data.recurring_application_charges?.find(
-          charge => charge.status === 'active'
-        ) || null;
-      }
-    } catch (e) {
-      console.error('Failed to fetch Shopify subscription:', e);
-    }
-
+    
+    const planConfig = PLANS[plan] || PLANS.starter;
+    
     res.json({
-      plan: shopData.plan,
-      planExpiresAt: shopData.plan_expires_at,
+      currentPlan: plan,
+      planDetails: planConfig,
       usage,
-      limits: getPlanLimits(shopData.plan),
-      subscription: activeSubscription,
-      availablePlans: PLANS,
+      plans: PLANS,
     });
-
+    
   } catch (error) {
     console.error('Billing status error:', error);
     res.status(500).json({ error: 'Failed to get billing status' });
@@ -89,312 +119,212 @@ router.get('/status', authMiddleware, async (req, res) => {
 });
 
 /**
- * Create subscription (initiate upgrade)
+ * Subscribe to a plan
  * POST /api/billing/subscribe
- * 
- * This creates a RecurringApplicationCharge in Shopify.
- * User must confirm on Shopify's page.
  */
 router.post('/subscribe', authMiddleware, async (req, res) => {
   try {
-    const { shop, accessToken } = req.shopify;
+    const { shop, accessToken, shopId } = req.shopify;
     const { plan } = req.body;
-
+    
+    console.log('Subscribe request:', { shop, plan, hasToken: !!accessToken });
+    
     if (!PLANS[plan]) {
-      return res.status(400).json({ error: 'Invalid plan. Choose: starter or pro' });
+      return res.status(400).json({ error: 'Invalid plan' });
     }
-
+    
+    // Check if we have a real access token
+    if (!accessToken || accessToken === 'embedded') {
+      return res.status(401).json({ 
+        error: 'OAuth required',
+        authUrl: `${APP_URL}/api/auth?shop=${shop}`,
+        message: 'Please reinstall the app to enable billing'
+      });
+    }
+    
     const selectedPlan = PLANS[plan];
-
-    // Create recurring charge via Shopify API
-    // Reference: https://shopify.dev/docs/api/admin-rest/2025-01/resources/recurringapplicationcharge#post-recurring-application-charges
-    const response = await fetch(
-      `https://${shop}/admin/api/2025-01/recurring_application_charges.json`,
-      {
-        method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recurring_application_charge: {
-            name: selectedPlan.name,
-            price: selectedPlan.price,
-            return_url: `${process.env.SHOPIFY_HOST}/api/billing/confirm?plan=${plan}`,
-            trial_days: selectedPlan.trialDays,
-            test: process.env.NODE_ENV !== 'production', // Use test charges in development
-            // capped_amount and terms are optional for usage-based billing
-          }
-        }),
+    
+    // Create recurring charge via Shopify
+    const chargeData = {
+      recurring_application_charge: {
+        name: selectedPlan.name,
+        price: selectedPlan.price,
+        return_url: `${APP_URL}/api/billing/confirm?shop=${shop}&plan=${plan}`,
+        test: process.env.NODE_ENV !== 'production',
       }
+    };
+    
+    console.log('Creating charge:', chargeData);
+    
+    const response = await shopifyRequest(
+      shop, 
+      accessToken, 
+      '/recurring_application_charges.json',
+      'POST',
+      chargeData
     );
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('Shopify billing error:', error);
-      return res.status(500).json({ error: 'Failed to create subscription' });
+    
+    console.log('Shopify response:', response.status, response.data);
+    
+    if (response.status !== 201 && response.status !== 200) {
+      console.error('Charge creation failed:', response.data);
+      return res.status(500).json({ 
+        error: 'Failed to create subscription',
+        details: response.data
+      });
     }
-
-    const data = await response.json();
-    const charge = data.recurring_application_charge;
-
-    // Return confirmation URL - user must visit this to approve
+    
+    const charge = response.data.recurring_application_charge;
+    
     res.json({
       success: true,
-      chargeId: charge.id,
       confirmationUrl: charge.confirmation_url,
+      chargeId: charge.id,
     });
-
+    
   } catch (error) {
     console.error('Subscribe error:', error);
-    res.status(500).json({ error: 'Failed to create subscription' });
+    res.status(500).json({ error: 'Subscription failed: ' + error.message });
   }
 });
 
 /**
- * Confirm subscription callback
- * GET /api/billing/confirm?charge_id=xxx&plan=xxx
- * 
- * Shopify redirects here after user approves/declines the charge.
+ * Confirm subscription
+ * GET /api/billing/confirm?charge_id=xxx&shop=xxx&plan=xxx
  */
 router.get('/confirm', async (req, res) => {
   try {
-    const { charge_id, plan } = req.query;
-    const { shop, accessToken } = req.session;
-
-    if (!shop || !accessToken) {
-      return res.redirect('/?error=session_expired');
+    const { charge_id, shop, plan } = req.query;
+    
+    console.log('Confirm billing:', { charge_id, shop, plan });
+    
+    if (!charge_id || !shop) {
+      return res.redirect(`/?shop=${shop}&error=missing_params`);
     }
-
-    if (!charge_id) {
-      return res.redirect('/dashboard?error=no_charge_id');
-    }
-
-    // Verify the charge status with Shopify
-    const response = await fetch(
-      `https://${shop}/admin/api/2025-01/recurring_application_charges/${charge_id}.json`,
-      {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      }
+    
+    // Get access token from DB
+    const shopResult = await pool.query(
+      'SELECT id, access_token FROM shops WHERE shopify_domain = $1',
+      [shop]
     );
-
-    if (!response.ok) {
-      return res.redirect('/dashboard?error=charge_not_found');
+    
+    if (shopResult.rows.length === 0 || !shopResult.rows[0].access_token) {
+      return res.redirect(`/?shop=${shop}&error=no_token`);
     }
-
-    const data = await response.json();
-    const charge = data.recurring_application_charge;
-
+    
+    const { id: shopId, access_token: accessToken } = shopResult.rows[0];
+    
+    // Check charge status
+    const response = await shopifyRequest(
+      shop,
+      accessToken,
+      `/recurring_application_charges/${charge_id}.json`
+    );
+    
+    console.log('Charge status:', response.status, response.data);
+    
+    if (response.status !== 200) {
+      return res.redirect(`/?shop=${shop}&error=charge_not_found`);
+    }
+    
+    const charge = response.data.recurring_application_charge;
+    
     if (charge.status === 'active') {
-      // Subscription approved! Activate it.
-      
-      // For charges that need activation (status === 'accepted'), 
-      // you need to activate them:
-      // POST /admin/api/2025-01/recurring_application_charges/{charge_id}/activate.json
-      
-      // But if already 'active', just update our database
-      await pool.query(`
-        UPDATE shops 
-        SET plan = $1, updated_at = NOW()
-        WHERE shopify_domain = $2
-      `, [plan || determinePlanFromPrice(charge.price), shop]);
-
-      res.redirect('/dashboard?upgraded=true');
+      // Already active, update plan
+      await pool.query(
+        'UPDATE shops SET plan = $1 WHERE id = $2',
+        [plan, shopId]
+      );
+      return res.redirect(`/?shop=${shop}&upgraded=${plan}`);
       
     } else if (charge.status === 'accepted') {
-      // Need to activate the charge
-      const activateResponse = await fetch(
-        `https://${shop}/admin/api/2025-01/recurring_application_charges/${charge_id}/activate.json`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json',
-          },
-        }
+      // Need to activate
+      const activateResponse = await shopifyRequest(
+        shop,
+        accessToken,
+        `/recurring_application_charges/${charge_id}/activate.json`,
+        'POST'
       );
-
-      if (activateResponse.ok) {
-        await pool.query(`
-          UPDATE shops 
-          SET plan = $1, updated_at = NOW()
-          WHERE shopify_domain = $2
-        `, [plan || determinePlanFromPrice(charge.price), shop]);
-
-        res.redirect('/dashboard?upgraded=true');
+      
+      console.log('Activate response:', activateResponse.status);
+      
+      if (activateResponse.status === 200 || activateResponse.status === 201) {
+        await pool.query(
+          'UPDATE shops SET plan = $1 WHERE id = $2',
+          [plan, shopId]
+        );
+        return res.redirect(`/?shop=${shop}&upgraded=${plan}`);
       } else {
-        res.redirect('/dashboard?error=activation_failed');
+        return res.redirect(`/?shop=${shop}&error=activation_failed`);
       }
       
     } else if (charge.status === 'declined') {
-      res.redirect('/dashboard?error=declined');
+      return res.redirect(`/?shop=${shop}&error=declined`);
       
     } else {
-      // pending, expired, etc.
-      res.redirect(`/dashboard?error=charge_status_${charge.status}`);
+      return res.redirect(`/?shop=${shop}&error=status_${charge.status}`);
     }
-
+    
   } catch (error) {
-    console.error('Confirm billing error:', error);
-    res.redirect('/dashboard?error=confirmation_failed');
+    console.error('Confirm error:', error);
+    res.redirect(`/?error=confirmation_failed`);
   }
 });
 
 /**
  * Cancel subscription
  * POST /api/billing/cancel
- * 
- * Note: This cancels the subscription in Shopify and downgrades in our DB.
- * Per Shopify docs, deleting a charge cancels it.
  */
 router.post('/cancel', authMiddleware, async (req, res) => {
   try {
-    const { shopId, shop, accessToken, plan } = req.shopify;
-
+    const { shop, accessToken, shopId, plan } = req.shopify;
+    
     if (plan === 'free') {
       return res.status(400).json({ error: 'Already on free plan' });
     }
-
-    // Find active subscription
-    const listResponse = await fetch(
-      `https://${shop}/admin/api/2025-01/recurring_application_charges.json`,
-      {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      }
+    
+    // List active charges
+    const listResponse = await shopifyRequest(
+      shop,
+      accessToken,
+      '/recurring_application_charges.json'
     );
-
-    if (!listResponse.ok) {
-      return res.status(500).json({ error: 'Failed to fetch subscriptions' });
-    }
-
-    const listData = await listResponse.json();
-    const activeCharge = listData.recurring_application_charges?.find(
-      c => c.status === 'active'
-    );
-
-    if (activeCharge) {
-      // Delete (cancel) the charge
-      const deleteResponse = await fetch(
-        `https://${shop}/admin/api/2025-01/recurring_application_charges/${activeCharge.id}.json`,
-        {
-          method: 'DELETE',
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-          },
-        }
-      );
-
-      if (!deleteResponse.ok && deleteResponse.status !== 404) {
-        console.error('Failed to delete charge');
-      }
-    }
-
-    // Downgrade to free in our database
-    await pool.query(
-      'UPDATE shops SET plan = $1, updated_at = NOW() WHERE id = $2',
-      ['free', shopId]
-    );
-
-    res.json({ success: true, message: 'Subscription cancelled, downgraded to free plan' });
-
-  } catch (error) {
-    console.error('Cancel subscription error:', error);
-    res.status(500).json({ error: 'Failed to cancel subscription' });
-  }
-});
-
-/**
- * Webhook: Handle subscription updates from Shopify
- * POST /api/billing/webhook
- * 
- * Topics to subscribe to:
- * - app_subscriptions/update
- * - app_subscriptions/cancelled
- */
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const hmac = req.get('X-Shopify-Hmac-Sha256');
-  const topic = req.get('X-Shopify-Topic');
-  const shop = req.get('X-Shopify-Shop-Domain');
-  
-  // Verify webhook signature
-  const crypto = require('crypto');
-  const generatedHmac = crypto
-    .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
-    .update(req.body)
-    .digest('base64');
-  
-  if (hmac !== generatedHmac) {
-    return res.status(401).json({ error: 'Invalid webhook signature' });
-  }
-
-  const payload = JSON.parse(req.body.toString());
-
-  try {
-    if (topic === 'app_subscriptions/update') {
-      // Handle subscription status change
-      const { app_subscription } = payload;
-      const status = app_subscription?.status;
+    
+    if (listResponse.status === 200) {
+      const charges = listResponse.data.recurring_application_charges || [];
+      const activeCharge = charges.find(c => c.status === 'active');
       
-      if (status === 'CANCELLED' || status === 'EXPIRED') {
-        await pool.query(
-          'UPDATE shops SET plan = $1 WHERE shopify_domain = $2',
-          ['free', shop]
+      if (activeCharge) {
+        // Delete/cancel the charge
+        await shopifyRequest(
+          shop,
+          accessToken,
+          `/recurring_application_charges/${activeCharge.id}.json`,
+          'DELETE'
         );
       }
     }
-
-    res.status(200).json({ received: true });
+    
+    // Downgrade to free
+    await pool.query(
+      'UPDATE shops SET plan = $1 WHERE id = $2',
+      ['free', shopId]
+    );
+    
+    res.json({ success: true, message: 'Subscription cancelled' });
     
   } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    console.error('Cancel error:', error);
+    res.status(500).json({ error: 'Failed to cancel: ' + error.message });
   }
 });
 
 /**
- * Determine plan from price
+ * Get available plans
+ * GET /api/billing/plans
  */
-function determinePlanFromPrice(price) {
-  const numPrice = parseFloat(price);
-  if (numPrice >= 79) return 'pro';
-  if (numPrice >= 29) return 'starter';
-  return 'free';
-}
-
-/**
- * Get plan limits
- */
-function getPlanLimits(plan) {
-  const limits = {
-    free: {
-      angles_per_month: 3,
-      copies_per_month: 15,
-      video_scripts: false,
-      teleprompter: false,
-      price: 0,
-    },
-    starter: {
-      angles_per_month: 30,
-      copies_per_month: -1,
-      video_scripts: true,
-      teleprompter: true,
-      price: 29,
-    },
-    pro: {
-      angles_per_month: -1,
-      copies_per_month: -1,
-      video_scripts: true,
-      teleprompter: true,
-      price: 79,
-    },
-  };
-  return limits[plan] || limits.free;
-}
+router.get('/plans', (req, res) => {
+  res.json({ plans: PLANS });
+});
 
 module.exports = router;

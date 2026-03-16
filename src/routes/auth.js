@@ -1,413 +1,231 @@
 const express = require('express');
 const crypto = require('crypto');
+const https = require('https');
 const { pool } = require('../config/database');
 
 const router = express.Router();
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET;
-const SHOPIFY_SCOPES = process.env.SHOPIFY_SCOPES || 'read_products';
-const SHOPIFY_HOST = process.env.SHOPIFY_HOST;
+const SHOPIFY_SCOPES = 'read_products,write_products';
+const APP_URL = process.env.SHOPIFY_HOST || 'https://adangle-ai-production.up.railway.app';
 
 /**
- * Validate shop domain format
- * Per Shopify docs: must be valid myshopify.com domain
+ * Validate shop domain
  */
 function isValidShop(shop) {
-  if (!shop || typeof shop !== 'string') return false;
-  // Shopify shop domains: {store}.myshopify.com
-  const shopRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
-  return shopRegex.test(shop);
+  if (!shop) return false;
+  return /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop);
 }
 
 /**
- * Verify HMAC signature from Shopify
- * Per Shopify OAuth docs
+ * Verify HMAC from Shopify
  */
-function verifyHmac(query, secret) {
-  const { hmac, signature, ...params } = query;
+function verifyHmac(query) {
+  const { hmac, ...params } = query;
+  if (!hmac) return false;
   
-  // Sort and stringify params
   const message = Object.keys(params)
     .sort()
-    .map(key => `${key}=${Array.isArray(params[key]) ? params[key].join(',') : params[key]}`)
+    .map(key => `${key}=${params[key]}`)
     .join('&');
   
   const generatedHmac = crypto
-    .createHmac('sha256', secret)
+    .createHmac('sha256', SHOPIFY_API_SECRET)
     .update(message)
     .digest('hex');
   
-  // Use timing-safe comparison to prevent timing attacks
   try {
     return crypto.timingSafeEqual(
       Buffer.from(hmac, 'hex'),
       Buffer.from(generatedHmac, 'hex')
     );
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
 /**
- * Start OAuth flow
- * GET /api/auth?shop=mystore.myshopify.com
- * 
- * Shopify OAuth Reference:
- * https://shopify.dev/docs/apps/auth/oauth/getting-started
+ * Make HTTPS request (helper)
+ */
+function httpsRequest(options, postData = null) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(data) });
+        } catch {
+          resolve({ status: res.statusCode, data });
+        }
+      });
+    });
+    req.on('error', reject);
+    if (postData) req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * Step 1: Start OAuth - redirect to Shopify
+ * GET /api/auth?shop=store.myshopify.com
  */
 router.get('/', (req, res) => {
   const { shop } = req.query;
   
   if (!isValidShop(shop)) {
-    return res.status(400).json({ error: 'Invalid shop parameter' });
+    return res.status(400).send('Invalid shop domain. Use: yourstore.myshopify.com');
   }
-
-  // Generate nonce for state parameter (CSRF protection)
-  const nonce = crypto.randomBytes(16).toString('hex');
-  req.session.state = nonce;
-  req.session.shop = shop;
-
-  const redirectUri = `${SHOPIFY_HOST}/api/auth/callback`;
   
-  // Build authorization URL per Shopify docs
-  const authUrl = new URL(`https://${shop}/admin/oauth/authorize`);
-  authUrl.searchParams.set('client_id', SHOPIFY_API_KEY);
-  authUrl.searchParams.set('scope', SHOPIFY_SCOPES);
-  authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('state', nonce);
-  // grant_options[] for offline access (default, persists token)
-  authUrl.searchParams.set('grant_options[]', 'per-user');
-
-  res.redirect(authUrl.toString());
+  // Generate nonce for CSRF protection
+  const nonce = crypto.randomBytes(16).toString('hex');
+  
+  // Store nonce in session
+  req.session.nonce = nonce;
+  req.session.shop = shop;
+  
+  // Build auth URL
+  const authUrl = `https://${shop}/admin/oauth/authorize?` +
+    `client_id=${SHOPIFY_API_KEY}&` +
+    `scope=${SHOPIFY_SCOPES}&` +
+    `redirect_uri=${APP_URL}/api/auth/callback&` +
+    `state=${nonce}`;
+  
+  console.log('OAuth redirect to:', authUrl);
+  res.redirect(authUrl);
 });
 
 /**
- * OAuth callback
- * GET /api/auth/callback
- * 
- * Shopify will redirect here with:
- * - code: authorization code to exchange for access token
- * - hmac: signature to verify request authenticity
- * - shop: the shop domain
- * - state: nonce we provided
- * - timestamp: request timestamp
+ * Step 2: OAuth Callback - exchange code for token
+ * GET /api/auth/callback?code=xxx&hmac=xxx&shop=xxx&state=xxx
  */
 router.get('/callback', async (req, res) => {
-  const { shop, code, state, hmac, timestamp } = req.query;
-
-  // 1. Verify shop domain
+  const { shop, code, state, hmac } = req.query;
+  
+  console.log('OAuth callback:', { shop, state, hasCode: !!code });
+  
+  // Verify shop
   if (!isValidShop(shop)) {
-    return res.status(400).json({ error: 'Invalid shop parameter' });
+    return res.status(400).send('Invalid shop');
   }
-
-  // 2. Verify state (CSRF protection)
-  if (!state || state !== req.session.state) {
-    return res.status(403).json({ error: 'State mismatch - possible CSRF attack' });
+  
+  // Verify HMAC
+  if (!verifyHmac(req.query)) {
+    console.error('HMAC verification failed');
+    return res.status(401).send('Invalid signature');
   }
-
-  // 3. Verify HMAC signature
-  if (!verifyHmac(req.query, SHOPIFY_API_SECRET)) {
-    return res.status(403).json({ error: 'HMAC validation failed' });
+  
+  // Verify state (nonce)
+  if (state !== req.session.nonce) {
+    console.error('State mismatch:', state, req.session.nonce);
+    return res.status(401).send('Invalid state');
   }
-
-  // 4. Verify timestamp is recent (within 5 minutes)
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - parseInt(timestamp)) > 300) {
-    return res.status(403).json({ error: 'Request timestamp too old' });
-  }
-
+  
   try {
-    // 5. Exchange authorization code for access token
-    const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        client_id: SHOPIFY_API_KEY,
-        client_secret: SHOPIFY_API_SECRET,
-        code,
-      }),
+    // Exchange code for access token
+    const postData = JSON.stringify({
+      client_id: SHOPIFY_API_KEY,
+      client_secret: SHOPIFY_API_SECRET,
+      code: code,
     });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.text();
-      console.error('Token exchange failed:', error);
-      return res.status(500).json({ error: 'Failed to exchange token' });
+    
+    const response = await httpsRequest({
+      hostname: shop,
+      path: '/admin/oauth/access_token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, postData);
+    
+    console.log('Token exchange response:', response.status);
+    
+    if (response.status !== 200 || !response.data.access_token) {
+      console.error('Token exchange failed:', response.data);
+      return res.status(500).send('Failed to get access token');
     }
-
-    const tokenData = await tokenResponse.json();
-    const { access_token, scope } = tokenData;
-
-    if (!access_token) {
-      return res.status(500).json({ error: 'No access token received' });
-    }
-
-    // 6. Save/update shop in database
-    const result = await pool.query(`
-      INSERT INTO shops (shopify_domain, access_token)
-      VALUES ($1, $2)
+    
+    const accessToken = response.data.access_token;
+    console.log('Got access token for', shop);
+    
+    // Save to database
+    await pool.query(`
+      INSERT INTO shops (shopify_domain, access_token, plan)
+      VALUES ($1, $2, 'free')
       ON CONFLICT (shopify_domain) 
       DO UPDATE SET access_token = $2
-      RETURNING id
-    `, [shop, access_token]);
-
-    // 7. Set session
+    `, [shop, accessToken]);
+    
+    // Store in session
     req.session.shop = shop;
-    req.session.accessToken = access_token;
-    req.session.shopId = result.rows[0].id;
-
-    // 8. Clear the state nonce
-    delete req.session.state;
-
-    // 9. Redirect to app dashboard
-    res.redirect('/dashboard');
-
+    req.session.accessToken = accessToken;
+    
+    // Redirect to app
+    const host = Buffer.from(`${shop}/admin`).toString('base64');
+    res.redirect(`/?shop=${shop}&host=${host}`);
+    
   } catch (error) {
-    console.error('OAuth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('OAuth callback error:', error);
+    res.status(500).send('Authentication failed');
   }
 });
 
 /**
- * Verify webhook HMAC
- * For future webhook implementation
+ * Install endpoint - for App Store installs
+ * GET /api/auth/install?shop=xxx
  */
-router.post('/webhook/verify', express.raw({ type: 'application/json' }), (req, res, next) => {
-  const hmac = req.get('X-Shopify-Hmac-Sha256');
-  const body = req.body;
+router.get('/install', (req, res) => {
+  const { shop } = req.query;
   
-  const generatedHmac = crypto
-    .createHmac('sha256', SHOPIFY_API_SECRET)
-    .update(body)
-    .digest('base64');
-  
-  if (hmac !== generatedHmac) {
-    return res.status(401).json({ error: 'Invalid webhook signature' });
+  if (!isValidShop(shop)) {
+    return res.status(400).send(`
+      <html>
+        <body style="font-family: sans-serif; padding: 40px; text-align: center;">
+          <h1>Install AdAngle AI</h1>
+          <p>Enter your Shopify store domain:</p>
+          <form action="/api/auth" method="GET">
+            <input type="text" name="shop" placeholder="yourstore.myshopify.com" 
+                   style="padding: 12px; font-size: 16px; width: 300px;">
+            <button type="submit" style="padding: 12px 24px; font-size: 16px; cursor: pointer;">
+              Install
+            </button>
+          </form>
+        </body>
+      </html>
+    `);
   }
   
-  next();
+  // Start OAuth
+  res.redirect(`/api/auth?shop=${shop}`);
 });
 
 /**
- * Get current session
- * GET /api/auth/session
+ * Check if shop has valid token
+ * GET /api/auth/check?shop=xxx
  */
-router.get('/session', async (req, res) => {
-  const { shop, accessToken } = req.session;
-
-  if (!shop || !accessToken) {
-    return res.status(401).json({ authenticated: false });
-  }
-
-  try {
-    // Verify token is still valid by making a simple API call
-    const verifyResponse = await fetch(`https://${shop}/admin/api/2025-01/shop.json`, {
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!verifyResponse.ok) {
-      // Token invalid, clear session
-      req.session.destroy();
-      return res.status(401).json({ authenticated: false, error: 'Token expired' });
-    }
-
-    const result = await pool.query(
-      'SELECT id, shopify_domain, plan, created_at FROM shops WHERE shopify_domain = $1',
-      [shop]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ authenticated: false });
-    }
-
-    const shopData = result.rows[0];
-
-    // Get usage for current month
-    const month = new Date().toISOString().slice(0, 7);
-    const usageResult = await pool.query(
-      'SELECT angles_discovered, copies_generated FROM usage WHERE shop_id = $1 AND month = $2',
-      [shopData.id, month]
-    );
-
-    const usage = usageResult.rows[0] || { angles_discovered: 0, copies_generated: 0 };
-
-    res.json({
-      authenticated: true,
-      shop: {
-        id: shopData.id,
-        domain: shopData.shopify_domain,
-        plan: shopData.plan,
-        createdAt: shopData.created_at,
-      },
-      usage,
-      limits: getPlanLimits(shopData.plan),
-    });
-
-  } catch (error) {
-    console.error('Session error:', error);
-    res.status(500).json({ error: 'Failed to get session' });
-  }
-});
-
-/**
- * Register shop (for embedded/custom apps)
- * GET /api/auth/register?shop=xxx
- */
-router.get('/register', async (req, res) => {
-  const { shop, host } = req.query;
+router.get('/check', async (req, res) => {
+  const { shop } = req.query;
   
   if (!shop) {
-    return res.status(400).json({ error: 'Shop required' });
+    return res.json({ authenticated: false });
   }
   
   try {
-    // Register or update shop in database
-    await pool.query(`
-      INSERT INTO shops (shopify_domain, access_token)
-      VALUES ($1, 'embedded')
-      ON CONFLICT (shopify_domain) 
-      DO UPDATE SET updated_at = NOW()
-    `, [shop]);
+    const result = await pool.query(
+      'SELECT access_token FROM shops WHERE shopify_domain = $1',
+      [shop]
+    );
     
-    // Set session
-    req.session.shop = shop;
+    if (result.rows.length === 0 || !result.rows[0].access_token || result.rows[0].access_token === 'embedded') {
+      return res.json({ authenticated: false, needsAuth: true });
+    }
     
-    res.json({ success: true, shop });
+    res.json({ authenticated: true });
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    res.json({ authenticated: false, error: error.message });
   }
 });
-
-/**
- * Save access token and sync products
- * POST /api/auth/token?shop=xxx
- */
-router.post('/token', async (req, res) => {
-  const { shop } = req.query;
-  const { token } = req.body;
-  
-  if (!shop || !token) {
-    return res.status(400).json({ error: 'Shop and token required' });
-  }
-  
-  if (!token.startsWith('shpat_')) {
-    return res.status(400).json({ error: 'Invalid token format. Must start with shpat_' });
-  }
-  
-  try {
-    // Verify token works by fetching shop info
-    const verifyResponse = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    if (!verifyResponse.ok) {
-      return res.status(400).json({ error: 'Invalid token or insufficient permissions' });
-    }
-    
-    // Save token
-    const result = await pool.query(`
-      UPDATE shops SET access_token = $1
-      WHERE shopify_domain = $2
-      RETURNING id
-    `, [token, shop]);
-    
-    if (result.rows.length === 0) {
-      await pool.query(`
-        INSERT INTO shops (shopify_domain, access_token)
-        VALUES ($1, $2)
-      `, [shop, token]);
-    }
-    
-    // Fetch and sync products
-    const productsResponse = await fetch(`https://${shop}/admin/api/2024-01/products.json?limit=50`, {
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    let productCount = 0;
-    if (productsResponse.ok) {
-      const productsData = await productsResponse.json();
-      const shopResult = await pool.query('SELECT id FROM shops WHERE shopify_domain = $1', [shop]);
-      const shopId = shopResult.rows[0].id;
-      
-      for (const p of productsData.products) {
-        await pool.query(`
-          INSERT INTO products (shop_id, shopify_product_id, title, description, price, compare_at_price, image_url, category)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (shop_id, shopify_product_id) 
-          DO UPDATE SET title = $3, description = $4, price = $5, compare_at_price = $6, image_url = $7
-        `, [
-          shopId,
-          p.id.toString(),
-          p.title,
-          p.body_html ? p.body_html.replace(/<[^>]*>/g, '').substring(0, 1000) : '',
-          p.variants[0]?.price || 0,
-          p.variants[0]?.compare_at_price || null,
-          p.image?.src || p.images?.[0]?.src || null,
-          p.product_type || null
-        ]);
-        productCount++;
-      }
-    }
-    
-    res.json({ success: true, products: productCount });
-    
-  } catch (error) {
-    console.error('Token save error:', error);
-    res.status(500).json({ error: 'Failed to save token' });
-  }
-});
-
-/**
- * Logout
- * POST /api/auth/logout
- */
-router.post('/logout', (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to logout' });
-    }
-    res.json({ success: true });
-  });
-});
-
-/**
- * Get plan limits
- */
-function getPlanLimits(plan) {
-  const limits = {
-    free: {
-      angles_per_month: 3,
-      copies_per_month: 15,
-      video_scripts: false,
-      teleprompter: false,
-    },
-    starter: {
-      angles_per_month: 30,
-      copies_per_month: -1, // unlimited
-      video_scripts: true,
-      teleprompter: true,
-    },
-    pro: {
-      angles_per_month: -1, // unlimited
-      copies_per_month: -1,
-      video_scripts: true,
-      teleprompter: true,
-    },
-  };
-  return limits[plan] || limits.free;
-}
 
 module.exports = router;
