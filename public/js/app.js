@@ -35,6 +35,24 @@ function escapeHtml(text) {
   return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function getLLMBadgeClass(modelOrStyle) {
+  const s = (modelOrStyle || '').toLowerCase();
+  if (s.includes('claude') || s === 'storytelling' || s === 'comparison') return 'claude';
+  if (s.includes('gpt') || s === 'problem-solution') return 'gpt';
+  if (s.includes('llama') || s === 'social-proof') return 'llama';
+  if (s.includes('mixtral') || s === 'urgency') return 'mixtral';
+  return 'claude';
+}
+
+function getLLMName(modelOrStyle) {
+  const s = (modelOrStyle || '').toLowerCase();
+  if (s.includes('claude') || s === 'storytelling' || s === 'comparison') return 'Claude';
+  if (s.includes('gpt') || s === 'problem-solution') return 'GPT-4o';
+  if (s.includes('llama') || s === 'social-proof') return 'Llama';
+  if (s.includes('mixtral') || s === 'urgency') return 'Mixtral';
+  return 'AI';
+}
+
 // API
 async function apiGet(endpoint) {
   const res = await fetch(`${API_BASE}${endpoint}?shop=${getShop()}`);
@@ -346,7 +364,10 @@ function renderProductDetail() {
           <div class="angle-card">
             <div class="angle-header">
               <span class="angle-name">${escapeHtml(a.name)}</span>
-              <span class="angle-emotion">${escapeHtml(a.emotion)}</span>
+              <div class="angle-badges">
+                <span class="llm-badge claude">Claude 3.5</span>
+                <span class="angle-emotion">${escapeHtml(a.emotion)}</span>
+              </div>
             </div>
             <div class="angle-hook">"${escapeHtml(a.hook)}"</div>
             <div class="angle-details">
@@ -396,7 +417,10 @@ function renderGenerate() {
           ${state.copies.map((c, i) => `
             <div class="copy-card">
               <div class="copy-header">
-                <span class="copy-style">${escapeHtml(c.style)}</span>
+                <div class="copy-meta">
+                  <span class="copy-style">${escapeHtml(c.style)}</span>
+                  <span class="llm-badge ${getLLMBadgeClass(c.model || c.style)}">${getLLMName(c.model || c.style)}</span>
+                </div>
                 <button class="btn btn-ghost btn-sm" onclick="copyToClipboard(${i})">📋 Copy</button>
               </div>
               <div class="copy-content">${escapeHtml(c.content)}</div>

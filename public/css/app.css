@@ -306,16 +306,54 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 12px;
+  gap: 12px;
 }
 
 .angle-name {
   font-size: 16px;
   font-weight: 600;
+  flex: 1;
+}
+
+.angle-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.llm-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.llm-badge.claude {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+  color: #000;
+}
+
+.llm-badge.gpt {
+  background: linear-gradient(135deg, #10a37f 0%, #1ed896 100%);
+  color: #000;
+}
+
+.llm-badge.llama {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+}
+
+.llm-badge.mixtral {
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+  color: #fff;
 }
 
 .angle-emotion {
-  font-size: 12px;
-  padding: 4px 10px;
+  font-size: 11px;
+  padding: 3px 10px;
   background: var(--bg-secondary);
   border-radius: 20px;
   color: var(--text-secondary);
@@ -419,6 +457,12 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.copy-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .copy-style {
