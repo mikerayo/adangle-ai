@@ -55,8 +55,8 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
     const savedAngles = [];
     for (const angle of angles) {
       const result = await pool.query(`
-        INSERT INTO angles (product_id, name, audience, pain_point, hook, objection, emotion, target_demo)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO angles (product_id, name, audience, pain_point, hook, objection, emotion)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
       `, [
         dbProductId,
@@ -65,8 +65,7 @@ router.post('/discover', authMiddleware, checkUsage('angles'), async (req, res) 
         angle.pain_point,
         angle.hook,
         angle.objection,
-        angle.emotion,
-        angle.target_demo
+        angle.emotion
       ]);
       savedAngles.push(result.rows[0]);
     }
