@@ -87,7 +87,7 @@ function renderNav() {
   return `
     <nav class="top-nav">
       <div class="nav-logo">
-        <div class="nav-logo-icon">🎯</div>
+        <img src="/images/logo.jpg" class="nav-logo-img" alt="AdAngle">
         <span>AdAngle</span>
       </div>
       <div class="nav-links">
@@ -384,7 +384,7 @@ function renderOnboarding() {
   return `
     <div class="onboarding-container">
       <div class="onboarding-hero">
-        <div class="onboarding-icon">🎯</div>
+        <div class="onboarding-icon"><img src="/images/logo.jpg" style="width: 80px; height: 80px; border-radius: 16px;"></div>
         <h1>Welcome to AdAngle</h1>
         <p>Discover winning ad angles for any product using AI</p>
       </div>
